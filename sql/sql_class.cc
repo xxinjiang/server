@@ -636,7 +636,6 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
    m_current_stage_key(0),
    in_sub_stmt(0), log_all_errors(0),
    binlog_unsafe_warning_flags(0),
-   binlog_table_maps(0),
    bulk_param(0),
    table_map_for_update(0),
    m_examined_row_count(0),
@@ -796,6 +795,7 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
   bzero(ha_data, sizeof(ha_data));
   mysys_var=0;
   binlog_evt_union.do_union= FALSE;
+  binlog_table_maps= FALSE;
   enable_slow_log= 0;
   durability_property= HA_REGULAR_DURABILITY;
 
@@ -1320,8 +1320,6 @@ void THD::init()
     variables.option_bits|= OPTION_BIN_LOG;
   else
     variables.option_bits&= ~OPTION_BIN_LOG;
-
-  variables.sql_log_bin_off= 0;
 
   select_commands= update_commands= other_commands= 0;
   /* Set to handle counting of aborted connections */
@@ -5849,8 +5847,9 @@ int THD::decide_logging_format(TABLE_LIST *tables)
 {
   DBUG_ENTER("THD::decide_logging_format");
   DBUG_PRINT("info", ("Query: %.*s", (uint) query_length(), query()));
-  DBUG_PRINT("info", ("variables.binlog_format: %lu",
-                      variables.binlog_format));
+  DBUG_PRINT("info", ("binlog_format: %lu", (ulong) variables.binlog_format));
+  DBUG_PRINT("info", ("current_stmt_binlog_format: %lu",
+                      (ulong) current_stmt_binlog_format));
   DBUG_PRINT("info", ("lex->get_stmt_unsafe_flags(): 0x%x",
                       lex->get_stmt_unsafe_flags()));
 
@@ -5873,18 +5872,14 @@ int THD::decide_logging_format(TABLE_LIST *tables)
       DBUG_RETURN(-1);
     }
   }
+#endif /* WITH_WSREP */
 
   if ((WSREP_EMULATE_BINLOG_NNULL(this) ||
-       (mysql_bin_log.is_open() && (variables.option_bits & OPTION_BIN_LOG))) &&
+       (mysql_bin_log.is_open() && 
+        (variables.option_bits & OPTION_BIN_LOG))) &&
       !(wsrep_binlog_format() == BINLOG_FORMAT_STMT &&
         !binlog_filter->db_ok(db.str)))
-#else
-  if (mysql_bin_log.is_open() && (variables.option_bits & OPTION_BIN_LOG) &&
-      !(wsrep_binlog_format() == BINLOG_FORMAT_STMT &&
-        !binlog_filter->db_ok(db.str)))
-#endif /* WITH_WSREP */
   {
-
     if (is_bulk_op())
     {
       if (wsrep_binlog_format() == BINLOG_FORMAT_STMT)
@@ -5927,6 +5922,7 @@ int THD::decide_logging_format(TABLE_LIST *tables)
     bool has_auto_increment_write_tables_not_first= FALSE;
     bool found_first_not_own_table= FALSE;
     bool has_write_tables_with_unsafe_statements= FALSE;
+    bool blackhole_table_found= 0;
 
     /*
       A pointer to a previous table that was changed.
@@ -6052,6 +6048,10 @@ int THD::decide_logging_format(TABLE_LIST *tables)
         if (prev_write_table && prev_write_table->file->ht !=
             table->file->ht)
           multi_write_engine= TRUE;
+
+        if (table->file->ht->db_type == DB_TYPE_BLACKHOLE_DB)
+          blackhole_table_found= 1;
+
         if (share->non_determinstic_insert &&
             !(sql_command_flags[lex->sql_command] & CF_SCHEMA_CHANGE))
           has_write_tables_with_unsafe_statements= true;
@@ -6297,7 +6297,8 @@ int THD::decide_logging_format(TABLE_LIST *tables)
                         is_current_stmt_binlog_format_row() ?
                         "ROW" : "STATEMENT"));
 
-    if (variables.binlog_format == BINLOG_FORMAT_ROW &&
+    if (blackhole_table_found &&
+        variables.binlog_format == BINLOG_FORMAT_ROW &&
         (sql_command_flags[lex->sql_command] &
          (CF_UPDATES_DATA | CF_DELETES_DATA)))
     {
@@ -6313,8 +6314,8 @@ int THD::decide_logging_format(TABLE_LIST *tables)
         if (table->table->file->ht->db_type == DB_TYPE_BLACKHOLE_DB &&
             table->lock_type >= TL_WRITE_ALLOW_WRITE)
         {
-            table_names.append(&table->table_name);
-            table_names.append(",");
+          table_names.append(&table->table_name);
+          table_names.append(",");
         }
       }
       if (!table_names.is_empty())
@@ -6334,9 +6335,12 @@ int THD::decide_logging_format(TABLE_LIST *tables)
                             table_names.c_ptr());
       }
     }
+
+    if (is_write && is_current_stmt_binlog_format_row())
+      binlog_prepare_for_row_logging();
   }
-#ifndef DBUG_OFF
   else
+  {
     DBUG_PRINT("info", ("decision: no logging since "
                         "mysql_bin_log.is_open() = %d "
                         "and (options & OPTION_BIN_LOG) = 0x%llx "
@@ -6346,22 +6350,23 @@ int THD::decide_logging_format(TABLE_LIST *tables)
                         (variables.option_bits & OPTION_BIN_LOG),
                         (uint) wsrep_binlog_format(),
                         binlog_filter->db_ok(db.str)));
-#endif
-
+    if (WSREP_NNULL(this) && is_current_stmt_binlog_format_row())
+      binlog_prepare_for_row_logging();
+  }
   DBUG_RETURN(0);
 }
 
 int THD::decide_logging_format_low(TABLE *table)
 {
+  DBUG_ENTER("decide_logging_format_low");
   /*
-   INSERT...ON DUPLICATE KEY UPDATE on a table with more than one unique keys
-   can be unsafe.
-   */
-  if(wsrep_binlog_format() <= BINLOG_FORMAT_STMT &&
-       !is_current_stmt_binlog_format_row() &&
-       !lex->is_stmt_unsafe() &&
-       lex->sql_command == SQLCOM_INSERT &&
-       lex->duplicates == DUP_UPDATE)
+    INSERT...ON DUPLICATE KEY UPDATE on a table with more than one unique keys
+    can be unsafe.
+  */
+  if (wsrep_binlog_format() <= BINLOG_FORMAT_STMT &&
+      !is_current_stmt_binlog_format_row() &&
+      !lex->is_stmt_unsafe() &&
+      lex->duplicates == DUP_UPDATE)
   {
     uint unique_keys= 0;
     uint keys= table->s->keys, i= 0;
@@ -6388,27 +6393,22 @@ exit:;
       lex->set_stmt_unsafe(LEX::BINLOG_STMT_UNSAFE_INSERT_TWO_KEYS);
       binlog_unsafe_warning_flags|= lex->get_stmt_unsafe_flags();
       set_current_stmt_binlog_format_row_if_mixed();
-      return 1;
+      if (is_current_stmt_binlog_format_row())
+        binlog_prepare_for_row_logging();
+      DBUG_RETURN(1);
     }
   }
-  return 0;
+  DBUG_RETURN(0);
 }
 
-/*
-  Implementation of interface to write rows to the binary log through the
-  thread.  The thread is responsible for writing the rows it has
-  inserted/updated/deleted.
-*/
-
 #ifndef MYSQL_CLIENT
-
 /*
   Template member function for ensuring that there is an rows log
   event of the apropriate type before proceeding.
 
   PRE CONDITION:
     - Events of type 'RowEventT' have the type code 'type_code'.
-    
+
   POST CONDITION:
     If a non-NULL pointer is returned, the pending event for thread 'thd' will
     be an event of type 'RowEventT' (which have the type code 'type_code')
@@ -6825,7 +6825,8 @@ void THD::binlog_prepare_row_images(TABLE *table)
    */
   if (table->s->primary_key < MAX_KEY &&
       (thd->variables.binlog_row_image < BINLOG_ROW_IMAGE_FULL) &&
-      !ha_check_storage_engine_flag(table->s->db_type(), HTON_NO_BINLOG_ROW_OPT))
+      !ha_check_storage_engine_flag(table->s->db_type(),
+                                    HTON_NO_BINLOG_ROW_OPT))
   {
     /**
       Just to be sure that tmp_set is currently not in use as
@@ -6870,7 +6871,7 @@ void THD::binlog_prepare_row_images(TABLE *table)
 
 
 
-int THD::binlog_remove_pending_rows_event(bool clear_maps,
+int THD::binlog_remove_pending_rows_event(bool reset_stmt,
                                           bool is_transactional)
 {
   DBUG_ENTER("THD::binlog_remove_pending_rows_event");
@@ -6884,11 +6885,11 @@ int THD::binlog_remove_pending_rows_event(bool clear_maps,
 
   mysql_bin_log.remove_pending_rows_event(this, is_transactional);
 
-  if (clear_maps)
-    binlog_table_maps= 0;
-
+  if (reset_stmt)
+    reset_binlog_for_next_statement();
   DBUG_RETURN(0);
 }
+
 
 int THD::binlog_flush_pending_rows_event(bool stmt_end, bool is_transactional)
 {
@@ -6915,9 +6916,8 @@ int THD::binlog_flush_pending_rows_event(bool stmt_end, bool is_transactional)
     if (stmt_end)
     {
       pending->set_flags(Rows_log_event::STMT_END_F);
-      binlog_table_maps= 0;
+      reset_binlog_for_next_statement();
     }
-
     error= mysql_bin_log.flush_and_set_pending_rows_event(this, 0,
                                                           is_transactional);
   }
@@ -7289,8 +7289,11 @@ int THD::binlog_query(THD::enum_binlog_query_type qtype, char const *query_arg,
           suppress_use, errcode);
         error= mysql_bin_log.write(&qinfo);
       }
+      /*
+        row logged binlog may not have been reset in the case of locked tables
+      */
+      reset_binlog_for_next_statement();
 
-      binlog_table_maps= 0;
       DBUG_RETURN(error >= 0 ? error : 1);
     }
 

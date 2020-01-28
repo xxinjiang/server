@@ -394,6 +394,7 @@ insert_server(THD *thd, FOREIGN_SERVER *server)
   /* need to open before acquiring THR_LOCK_plugin or it will deadlock */
   if (! (table= open_ltable(thd, &tables, TL_WRITE, MYSQL_LOCK_IGNORE_TIMEOUT)))
     goto end;
+  table->file->row_logging= 0;                  // Don't log to binary log
 
   /* insert the server into the table */
   if (unlikely(error= insert_server_record(table, server)))
@@ -532,9 +533,9 @@ int insert_server_record(TABLE *table, FOREIGN_SERVER *server)
 {
   int error;
   DBUG_ENTER("insert_server_record");
-  tmp_disable_binlog(table->in_use);
-  table->use_all_columns();
+  DBUG_ASSERT(!table->file->row_logging);
 
+  table->use_all_columns();
   empty_record(table);
 
   /* set the field that's the PK to the value we're looking for */
@@ -567,8 +568,6 @@ int insert_server_record(TABLE *table, FOREIGN_SERVER *server)
   }
   else
     error= ER_FOREIGN_SERVER_EXISTS;
-
-  reenable_binlog(table->in_use);
   DBUG_RETURN(error);
 }
 
@@ -885,7 +884,8 @@ update_server_record(TABLE *table, FOREIGN_SERVER *server)
 {
   int error=0;
   DBUG_ENTER("update_server_record");
-  tmp_disable_binlog(table->in_use);
+  DBUG_ASSERT(!table->file->row_logging);
+
   table->use_all_columns();
   /* set the field that's the PK to the value we're looking for */
   table->field[0]->store(server->server_name,
@@ -921,7 +921,6 @@ update_server_record(TABLE *table, FOREIGN_SERVER *server)
   }
 
 end:
-  reenable_binlog(table->in_use);
   DBUG_RETURN(error);
 }
 
@@ -946,7 +945,8 @@ delete_server_record(TABLE *table, LEX_CSTRING *name)
 {
   int error;
   DBUG_ENTER("delete_server_record");
-  tmp_disable_binlog(table->in_use);
+  DBUG_ASSERT(!table->file->row_logging);
+
   table->use_all_columns();
 
   /* set the field that's the PK to the value we're looking for */
@@ -970,7 +970,6 @@ delete_server_record(TABLE *table, LEX_CSTRING *name)
       table->file->print_error(error, MYF(0));
   }
 
-  reenable_binlog(table->in_use);
   DBUG_RETURN(error);
 }
 

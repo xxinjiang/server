@@ -179,7 +179,7 @@
 #define OPTION_RPL_SKIP_PARALLEL        (1ULL << 38)
 #define OPTION_NO_QUERY_CACHE           (1ULL << 39) // SELECT, user
 #define OPTION_PROCEDURE_CLAUSE         (1ULL << 40) // Internal usage
-
+#define OPTION_BIN_TMP_LOG_OFF          (1ULL << 41) // Temp disable binlog
 
 #define OPTION_LEX_FOUND_COMMENT        (1ULL << 0) //  intern, parser
 

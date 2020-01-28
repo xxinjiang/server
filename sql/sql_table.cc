@@ -10506,10 +10506,10 @@ do_continue:;
         No additional logging of query is needed
       */
       binlog_done= 1;
+      DBUG_ASSERT(new_table->file->row_logging);
       new_table->mark_columns_needed_for_insert();
       thd->binlog_start_trans_and_stmt();
-      binlog_write_table_map(thd, new_table,
-                             thd->variables.binlog_annotate_row_events);
+      thd->binlog_write_table_map(new_table, 1);
     }
     if (copy_data_between_tables(thd, table, new_table,
                                  alter_info->create_list, ignore,
