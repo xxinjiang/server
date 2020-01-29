@@ -139,7 +139,7 @@ void log_buffer_extend(ulong len)
 {
 	const ulong new_buf_size = ut_calc_align(len, srv_page_size);
 	byte* new_buf = static_cast<byte*>(
-		ut_malloc_dontdump(new_buf_size * 2));
+		ut_malloc_dontdump(new_buf_size * 2, PSI_INSTRUMENT_ME));
 	TRASH_ALLOC(new_buf, new_buf_size * 2);
 
 	log_mutex_enter();
@@ -520,7 +520,7 @@ void log_t::create()
   ut_ad(srv_log_buffer_size >= 16 * OS_FILE_LOG_BLOCK_SIZE);
   ut_ad(srv_log_buffer_size >= 4U << srv_page_size_shift);
 
-  buf= static_cast<byte*>(ut_malloc_dontdump(srv_log_buffer_size * 2));
+  buf= static_cast<byte*>(ut_malloc_dontdump(srv_log_buffer_size * 2, PSI_INSTRUMENT_ME));
   TRASH_ALLOC(buf, srv_log_buffer_size * 2);
 
   first_in_use= true;

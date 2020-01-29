@@ -222,7 +222,8 @@ SORT_INFO *filesort(THD *thd, TABLE *table, Filesort *filesort,
   sort->addon_fields=  param.addon_fields;
 
   if (multi_byte_charset &&
-      !(param.tmp_buffer= (char*) my_malloc(param.sort_length,
+      !(param.tmp_buffer= (char*) my_malloc(key_memory_Sort_param_tmp_buffer,
+                                            param.sort_length,
                                             MYF(MY_WME | MY_THREAD_SPECIFIC))))
     goto err;
 
@@ -558,7 +559,8 @@ static uchar *read_buffpek_from_file(IO_CACHE *buffpek_pointers, uint count,
   if (count > UINT_MAX/sizeof(Merge_chunk))
     return 0; /* sizeof(BUFFPEK)*count will overflow */
   if (!tmp)
-    tmp= (uchar *)my_malloc(length, MYF(MY_WME | MY_THREAD_SPECIFIC));
+    tmp= (uchar *)my_malloc(key_memory_Filesort_info_merge, length,
+                            MYF(MY_WME | MY_THREAD_SPECIFIC));
   if (tmp)
   {
     if (reinit_io_cache(buffpek_pointers,READ_CACHE,0L,0,0) ||
@@ -1402,8 +1404,8 @@ static bool save_index(Sort_param *param, uint count,
   res_length= param->res_length;
   offset= param->rec_length-res_length;
   if (!(to= table_sort->record_pointers= 
-        (uchar*) my_malloc(res_length*count,
-                           MYF(MY_WME | MY_THREAD_SPECIFIC))))
+        (uchar*) my_malloc(key_memory_Filesort_info_record_pointers,
+                           res_length*count, MYF(MY_WME | MY_THREAD_SPECIFIC))))
     DBUG_RETURN(1);                 /* purecov: inspected */
   for (uint ix= 0; ix < count; ++ix)
   {
@@ -2243,7 +2245,7 @@ get_addon_fields(TABLE *table, uint sortlength,
 
   if (!filesort_use_addons(table, sortlength, &length, &fields, &null_fields,
                             &packable_length) ||
-       !(my_multi_malloc(MYF(MY_WME | MY_THREAD_SPECIFIC),
+       !(my_multi_malloc(PSI_INSTRUMENT_ME, MYF(MY_WME | MY_THREAD_SPECIFIC),
                          &raw_mem, sizeof(Addon_fields),
                          &raw_mem_addon_field,
                          sizeof(SORT_ADDON_FIELD) * fields,
