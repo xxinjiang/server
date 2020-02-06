@@ -1013,21 +1013,130 @@ CPP_UNNAMED_NS_END
   Static help functions
 *****************************************************************************/
 
+/*
+  @brief
+    Helper function to create sort key for Fields
 
-void Field::make_sort_key(uchar *buff,uint length)
+  @param  order_by_type  type in which values are written to buffer
+  @param  buff           buffer where values are written
+  @param  sort_field     sort column structure
+
+  @retval
+    length of the bytes written, does not include the NULL bytes
+*/
+
+uint
+Field::make_sort_key(enum sort_method_t order_by_type,
+                     uchar *buff, const SORT_FIELD_ATTR *sort_field)
+{
+  switch (order_by_type)
+  {
+    case ORDER_BY_STRXFRM:
+      return make_sort_key(buff, sort_field->length);
+    case ORDER_BY_ORIGINAL:
+      return make_packed_sort_key(buff, sort_field);
+    default:
+      DBUG_ASSERT(0);
+      break;
+  }
+  return 0;
+}
+
+
+uint Field::make_sort_key(uchar *buff,uint length)
 {
   if (maybe_null())
   {
     if (is_null())
     {
       bzero(buff, length + 1);
-      return;
+      return length;
     }
     *buff++= 1;
   }
   sort_string(buff, length);
+  return length;
 }
 
+
+/*
+  @brief
+    Create a packed sort key
+
+  @param  buff           buffer where values are written
+  @param  sort_field     sort column structure
+
+  @retval
+    length of the bytes written, does not include the NULL bytes
+*/
+uint
+Field::make_packed_sort_key(uchar *buff, const SORT_FIELD_ATTR *sort_field)
+{
+  if (maybe_null())
+  {
+    if (is_null())
+    {
+      *buff++= 0;
+      return 0;  // For NULL values don't write any data
+    }
+    *buff++=1;
+  }
+  sort_string(buff, sort_field->original_length);
+  return sort_field->original_length;
+}
+
+
+uint
+Field_longstr::make_packed_sort_key(uchar *buff,
+                                    const SORT_FIELD_ATTR *sort_field)
+{
+  if (maybe_null())
+  {
+    if (is_null())
+    {
+      *buff++= 0;
+      return 0;   // For NULL values don't write any data
+    }
+    *buff++=1;
+  }
+  uchar *end= pack_sort_string(buff, sort_field);
+  return static_cast<int>(end-buff);
+}
+
+
+uchar*
+Field_longstr::pack_sort_string(uchar *to, const SORT_FIELD_ATTR *sort_field)
+{
+  String buf;
+  val_str(&buf, &buf);
+  return to + sort_field->pack_sort_string(to, buf.lex_cstring(),
+                                           field_charset());
+}
+
+
+/*
+  The default implementation assumes values are fixed-size and compared with
+  memcmp.
+*/
+
+int
+Field::compare_packed_sort_keys(uchar *a, size_t *a_len,
+                                uchar *b, size_t *b_len,
+                                const SORT_FIELD *sortorder)const
+{
+  return compare_packed_fixed_size_vals(a, a_len, b, b_len, sortorder,
+                                        sortorder->field->maybe_null());
+}
+
+
+int
+Field_longstr::compare_packed_sort_keys(uchar *a, size_t *a_len,
+                                        uchar *b, size_t *b_len,
+                                        const SORT_FIELD *sortorder) const
+{
+  return compare_packed_varstrings(charset(), a, a_len, b, b_len, sortorder,
+                                   sortorder->field->maybe_null());
+}
 
 /**
   @brief
@@ -5395,29 +5504,6 @@ static longlong read_native(const uchar *from, uint bytes)
 }
 #endif
 
-static void store_lowendian(ulonglong num, uchar *to, uint bytes)
-{
-  switch(bytes) {
-  case 1: *to= (uchar)num;    break;
-  case 2: int2store(to, num); break;
-  case 3: int3store(to, num); break;
-  case 4: int4store(to, num); break;
-  case 8: int8store(to, num); break;
-  default: DBUG_ASSERT(0);
-  }
-}
-
-static longlong read_lowendian(const uchar *from, uint bytes)
-{
-  switch(bytes) {
-  case 1: return from[0];
-  case 2: return uint2korr(from);
-  case 3: return uint3korr(from);
-  case 4: return uint4korr(from);
-  case 8: return sint8korr(from);
-  default: DBUG_ASSERT(0); return 0;
-  }
-}
 
 void Field_timestamp_hires::store_TIMEVAL(const timeval &tv)
 {
@@ -8526,8 +8612,15 @@ Binlog_type_info Field_blob::binlog_type_info() const
 
 uint32 Field_blob::sort_length() const
 {
-  return (uint32) (get_thd()->variables.max_sort_length + 
-                   (field_charset() == &my_charset_bin ? 0 : packlength));
+  return packlength == 4 ?
+    UINT_MAX32 :
+    (uint32) field_length + sort_suffix_length();
+}
+
+
+uint32 Field_blob::sort_suffix_length() const
+{
+  return field_charset() == &my_charset_bin ?  packlength : 0;
 }
 
 

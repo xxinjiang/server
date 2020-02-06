@@ -634,7 +634,12 @@ static int rr_unpack_from_buffer(READ_RECORD *info)
 
   uchar *record= info->sort_info->get_sorted_record(
     static_cast<uint>(info->unpack_counter));
-  uchar *plen= record + info->sort_info->get_sort_length();
+
+  uint sort_length= info->sort_info->using_packed_sortkeys() ?
+                    Sort_keys::read_sortkey_length(record):
+                    info->sort_info->get_sort_length();
+
+  uchar *plen= record + sort_length;
   info->sort_info->unpack_addon_fields<Packed_addon_fields>(plen);
   info->unpack_counter++;
   return 0;
@@ -772,6 +777,19 @@ static int rr_cmp(uchar *a,uchar *b)
 #endif
 }
 
+
+/**
+  Copy (unpack) values appended to sorted fields from a buffer back to
+  their regular positions specified by the Field::ptr pointers.
+
+  @param addon_field     Array of descriptors for appended fields
+  @param buff            Buffer which to unpack the value from
+
+  @note
+    The function is supposed to be used only as a callback function
+    when getting field values for the sorted result set.
+
+*/
 template<bool Packed_addon_fields>
 inline void SORT_INFO::unpack_addon_fields(uchar *buff)
 {

@@ -25,9 +25,18 @@ class THD;
 struct TABLE;
 class Filesort_tracker;
 struct SORT_FIELD;
+struct SORT_FIELD_ATTR;
 typedef struct st_order ORDER;
 class JOIN;
 class Addon_fields;
+class Sort_keys;
+
+
+enum sort_method_t
+{
+  ORDER_BY_STRXFRM,
+  ORDER_BY_ORIGINAL
+};
 
 /**
   Sorting related info.
@@ -57,6 +66,7 @@ public:
   bool sort_positions;
 
   Filesort_tracker *tracker;
+  Sort_keys *sort_keys;
 
   Filesort(ORDER *order_arg, ha_rows limit_arg, bool sort_positions_arg,
            SQL_SELECT *select_arg):
@@ -66,14 +76,15 @@ public:
     select(select_arg),
     own_select(false), 
     using_pq(false),
-    sort_positions(sort_positions_arg)
+    sort_positions(sort_positions_arg),
+    sort_keys(NULL)
   {
     DBUG_ASSERT(order);
   };
 
   ~Filesort() { cleanup(); }
   /* Prepare ORDER BY list for sorting. */
-  uint make_sortorder(THD *thd, JOIN *join, table_map first_table_bit);
+  Sort_keys* make_sortorder(THD *thd, JOIN *join, table_map first_table_bit);
 
 private:
   void cleanup();
@@ -121,6 +132,7 @@ public:
   LEX_STRING buffpek;           /* Buffer for buffpek structures */
   Addon_fields *addon_fields;   /* Addon field descriptors */
   uchar     *record_pointers;    /* If sorted in memory */
+  Sort_keys *sort_keys;         /* Sort key descriptors*/
 
   /**
     If the entire result of filesort fits in memory, we skip the merge phase.
@@ -201,6 +213,7 @@ public:
   template<bool Packed_addon_fields>
   inline void unpack_addon_fields(uchar *buff);
 
+  bool using_packed_sortkeys();
 
   friend SORT_INFO *filesort(THD *thd, TABLE *table, Filesort *filesort,
                              Filesort_tracker* tracker, JOIN *join,
@@ -216,5 +229,19 @@ bool filesort_use_addons(TABLE *table, uint sortlength,
                          uint *m_packable_length);
 
 void change_double_for_sort(double nr,uchar *to);
+void store_length(uchar *to, uint length, uint pack_length);
+int compare_packed_fixed_size_vals(uchar *a, size_t *a_len,
+                                   uchar *b, size_t *b_len,
+                                   const SORT_FIELD_ATTR *sort_field,
+                                   bool maybe_null);
+int compare_packed_varstrings(CHARSET_INFO *cs, uchar *a, size_t *a_len,
+                              uchar *b, size_t *b_len,
+                              const SORT_FIELD_ATTR *sort_field,
+                              bool maybe_null);
+void
+reverse_key(uchar *to, bool maybe_null,  const SORT_FIELD_ATTR *sort_field);
+bool check_if_packing_possible(THD *thd, CHARSET_INFO *cs,
+                               const SORT_FIELD_ATTR *sort_field);
+
 
 #endif /* FILESORT_INCLUDED */
