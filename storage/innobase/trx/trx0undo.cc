@@ -499,7 +499,7 @@ static void trx_undo_write_xid(buf_block_t *block, uint16_t offset,
 {
   DBUG_ASSERT(xid.gtrid_length >= 0);
   DBUG_ASSERT(xid.bqual_length >= 0);
-  DBUG_ASSERT(xid.gtrid_length + xid.bqual_length < XIDDATASIZE);
+  DBUG_ASSERT(xid.gtrid_length + xid.bqual_length <= XIDDATASIZE);
   DBUG_ASSERT(mach_read_from_2(TRX_UNDO_SEG_HDR + TRX_UNDO_LAST_LOG +
                                block->frame) == offset);
 
