@@ -888,6 +888,8 @@ void partition_info::vers_set_hist_part(THD *thd)
   return;
 
 add_hist_part:
+  if (!vers_info->auto_inc)
+    return;
   switch (thd->lex->sql_command)
   {
   case SQLCOM_DELETE:
@@ -998,7 +1000,7 @@ pthread_handler_t vers_add_hist_part_thread(void *arg)
     lex_end(thd->lex);
     goto err2;
   }
-  thd->set_query_and_id(LEX_STRING_WITH_LEN(d.query), thd->charset(), next_query_id());
+  thd->set_query_and_id(d.query.str, (uint32)d.query.length, thd->charset(), next_query_id());
   MYSQL_QUERY_EXEC_START(thd->query(), thd->thread_id, "", "", "", 0);
   error= (uint) mysql_execute_command(thd);
   MYSQL_QUERY_EXEC_DONE(error);
@@ -2883,13 +2885,14 @@ bool partition_info::vers_init_info(THD * thd)
 
 bool partition_info::vers_set_interval(THD* thd, Item* interval,
                                        interval_type int_type, Item* starts,
-                                       const char *table_name)
+                                       bool auto_inc, const char *table_name)
 {
   DBUG_ASSERT(part_type == VERSIONING_PARTITION);
 
   MYSQL_TIME ltime;
   uint err;
   vers_info->interval.type= int_type;
+  vers_info->auto_inc= auto_inc;
 
   /* 1. assign INTERVAL to interval.step */
   if (interval->fix_fields_if_needed_for_scalar(thd, &interval))

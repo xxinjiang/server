@@ -296,7 +296,7 @@ x
 8
 # Auto-create history partitions
 create or replace table t1 (x int) with system versioning
-partition by system_time limit 1000;
+partition by system_time limit 1000 auto_increment;
 lock tables t1 write;
 insert into t1 values (1);
 update t1 set x= x + 1;
@@ -309,7 +309,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
 ) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
- PARTITION BY SYSTEM_TIME LIMIT 1000
+ PARTITION BY SYSTEM_TIME LIMIT 1000 AUTO_INCREMENT
 (PARTITION `p0` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
@@ -320,8 +320,6 @@ create or replace table t1 (x int) with system versioning partition by system_ti
 lock tables t1 write;
 insert t1 values (1);
 insert t1 values (1);
-Warnings:
-Warning	4167	Versioned table `test`.`t1`: adding HISTORY partition failed with error 1205, see error log for details
 unlock tables;
 set global lock_wait_timeout= @lock_wait_timeout0;
 #

@@ -38,6 +38,7 @@ struct Vers_part_info : public Sql_alloc
 {
   Vers_part_info() :
     limit(0),
+    auto_inc(false),
     now_part(NULL),
     hist_part(NULL)
   {
@@ -46,6 +47,7 @@ struct Vers_part_info : public Sql_alloc
   Vers_part_info(Vers_part_info &src) :
     interval(src.interval),
     limit(src.limit),
+    auto_inc(src.auto_inc),
     now_part(NULL),
     hist_part(NULL)
   {
@@ -92,6 +94,7 @@ struct Vers_part_info : public Sql_alloc
     }
   } interval;
   ulonglong limit;
+  bool auto_inc;
   partition_element *now_part;
   partition_element *hist_part;
 };
@@ -414,11 +417,12 @@ public:
   bool vers_init_info(THD *thd);
   bool vers_set_interval(THD *thd, Item *interval,
                          interval_type int_type, Item *starts,
-                         const char *table_name);
-  bool vers_set_limit(ulonglong limit)
+                         bool auto_inc, const char *table_name);
+  bool vers_set_limit(ulonglong limit, bool auto_inc)
   {
     DBUG_ASSERT(part_type == VERSIONING_PARTITION);
     vers_info->limit= limit;
+    vers_info->auto_inc= auto_inc;
     return !limit;
   }
   void vers_set_hist_part(THD *thd);

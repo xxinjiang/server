@@ -168,7 +168,7 @@ drop table t1;
 # MDEV-17554 Auto-create new partition for system versioned tables with history partitioned by INTERVAL/LIMIT
 #
 create or replace table t1 (x int) with system versioning
-partition by system_time limit 1000;
+partition by system_time limit 1000 auto_increment;
 lock tables t1 write;
 insert t1 values ();
 delete from t1;

@@ -140,7 +140,7 @@ let $wait_no_alter= select count(*) = 0 from information_schema.processlist wher
 let $wait_alter= select count(*) > 0 from information_schema.processlist where info like 'ALTER TABLE %';
 
 create or replace table t1 (x int) with system versioning
-partition by system_time limit 1000;
+partition by system_time limit 1000 auto_increment;
 lock tables t1 write;
 insert t1 values ();
 delete from t1;
