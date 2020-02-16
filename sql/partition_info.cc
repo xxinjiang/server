@@ -322,13 +322,11 @@ bool partition_info::set_partition_bitmaps_from_table(TABLE_LIST *table_list)
     The external routine needing this code is check_partition_info
 */
 
-#define MAX_PART_NAME_SIZE 8
-
 char *partition_info::create_default_partition_names(THD *thd, uint part_no,
                                                      uint num_parts_arg,
                                                      uint start_no)
 {
-  char *ptr= (char*) thd->calloc(num_parts_arg * MAX_PART_NAME_SIZE);
+  char *ptr= (char*) thd->calloc(num_parts_arg * MAX_PART_NAME_SIZE + 1);
   char *move_ptr= ptr;
   uint i= 0;
   DBUG_ENTER("create_default_partition_names");
@@ -337,7 +335,8 @@ char *partition_info::create_default_partition_names(THD *thd, uint part_no,
   {
     do
     {
-      sprintf(move_ptr, "p%u", (start_no + i));
+      if (make_partition_name(move_ptr, (start_no + i)))
+        DBUG_RETURN(NULL);
       move_ptr+= MAX_PART_NAME_SIZE;
     } while (++i < num_parts_arg);
   }
@@ -881,7 +880,7 @@ void partition_info::vers_set_hist_part(THD *thd)
                  table->s->db.str, table->s->table_name.str,
                  vers_info->hist_part->partition_name, "INTERVAL");
     }
-    if (vers_info->interval >= VERS_MIN_INTERVAL)
+    if (vers_info->interval.ge(VERS_MIN_INTERVAL))
       goto add_hist_part;
   }
 
@@ -934,7 +933,7 @@ struct vers_add_hist_part_data
 
   TABLE_SHARE *s;
 
-  void assign(THD *thd, String &q, TABLE *table, String &p)
+  void assign(THD *thd, String &q, TABLE *table, LEX_CSTRING p)
   {
     start_time= thd->start_time;
     start_time_sec_part= thd->start_time_sec_part;
@@ -952,9 +951,8 @@ struct vers_add_hist_part_data
     memcpy((char *)table_name.str, table->s->table_name.str, table_name.length);
     ((char *)table_name.str)[table_name.length]= 0;
 
-    memcpy(part_name.str, p.c_ptr_quick(), p.length());
-    part_name.str[p.length()]= 0;
-    part_name.length= p.length();
+    memcpy(part_name.str, p.str, p.length + 1);
+    part_name.length= p.length;
   }
 };
 
@@ -1038,6 +1036,7 @@ void partition_info::vers_add_hist_part(THD *thd)
 {
   pthread_t hThread;
   int error;
+  char part_name[MAX_PART_NAME_SIZE + 1];
 
   /* Prevent spawning multiple instances of same task */
   bool altering;
@@ -1051,26 +1050,27 @@ void partition_info::vers_add_hist_part(THD *thd)
 
   /* Choose first non-occupied name suffix starting from id + 1 */
   uint32 suffix= vers_info->hist_part->id + 1;
-  static const char *prefix= "p";
-  static const size_t prefix_len= strlen(prefix);
-  List_iterator_fast<partition_element> it(partitions);
-  partition_element *el;
-  String part_name(prefix, prefix_len, &my_charset_latin1);
-  if (part_name.append_ulonglong(suffix))
+  if (make_partition_name(part_name, suffix))
   {
-    my_error(ER_OUT_OF_RESOURCES, MYF(ME_ERROR_LOG));
+    sql_print_warning("vers_add_hist_part name generation failed for suffix %d",
+                      suffix);
+    my_error(WARN_VERS_HIST_PART_ERROR, MYF(ME_WARNING),
+            table->s->db.str, table->s->table_name.str, 0);
     return;
   }
+  List_iterator_fast<partition_element> it(partitions);
+  partition_element *el;
 
   while ((el= it++))
   {
-    if (0 == my_strcasecmp(&my_charset_latin1, el->partition_name, part_name.c_ptr()))
+    if (0 == my_strcasecmp(&my_charset_latin1, el->partition_name, part_name))
     {
-      ++suffix;
-      part_name.set(prefix, prefix_len, &my_charset_latin1);
-      if (part_name.append_ulonglong(suffix))
+      if (make_partition_name(part_name, ++suffix))
       {
-        my_error(ER_OUT_OF_RESOURCES, MYF(ME_ERROR_LOG));
+        sql_print_warning("vers_add_hist_part name generation failed for suffix %d",
+                          suffix);
+        my_error(WARN_VERS_HIST_PART_ERROR, MYF(ME_WARNING),
+                table->s->db.str, table->s->table_name.str, 0);
         return;
       }
       it.rewind();
@@ -1090,14 +1090,17 @@ void partition_info::vers_add_hist_part(THD *thd)
   }
   vers_add_hist_part_data *data;
   vers_add_hist_part_data bufs;
+  LEX_CSTRING part_name2;
+  part_name2.str= part_name;
+  part_name2.length= strlen(part_name);
   if (!my_multi_malloc(MYF(MY_WME|ME_ERROR_LOG), &data, sizeof(*data),
                        &bufs.query.str, q.length() + 1,
                        &bufs.db.str, table->s->db.length + 1,
                        &bufs.table_name.str, table->s->table_name.length + 1,
-                       &bufs.part_name.str, part_name.length() + 1,
+                       &bufs.part_name.str, part_name2.length + 1,
                        NULL))
     return;
-  bufs.assign(thd, q, table, part_name);
+  bufs.assign(thd, q, table, part_name2);
   *data= bufs;
 
   if ((error= mysql_thread_create(key_thread_query, &hThread,

@@ -72,7 +72,7 @@ struct Vers_part_info : public Sql_alloc
     INTERVAL step;
     enum interval_type type;
     bool is_set() const { return type < INTERVAL_LAST; }
-    bool operator< (size_t seconds) const
+    bool lt(size_t seconds) const
     {
       if (step.second)
         return step.second < seconds;
@@ -86,11 +86,11 @@ struct Vers_part_info : public Sql_alloc
       if (step.month)
         return step.month * 3600 * 24 * 30 < seconds;
       DBUG_ASSERT(step.year);
-      return step.year * 86400 * 30 * 365;
+      return step.year * 86400 * 30 * 365 < seconds;
     }
-    bool operator>= (size_t seconds) const
+    bool ge(size_t seconds) const
     {
-      return !((*this) < seconds);
+      return !(this->lt(seconds));
     }
   } interval;
   ulonglong limit;
@@ -523,6 +523,16 @@ void partition_info::vers_update_el_ids()
         break;
     }
   }
+}
+
+
+#define MAX_PART_NAME_SIZE 8
+
+inline
+bool make_partition_name(char *move_ptr, uint i)
+{
+  int res= snprintf(move_ptr, MAX_PART_NAME_SIZE + 1, "p%u", i);
+  return res < 0 || res > MAX_PART_NAME_SIZE;
 }
 
 #endif /* PARTITION_INFO_INCLUDED */
