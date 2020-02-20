@@ -288,14 +288,11 @@ static dberr_t create_log_file(lsn_t lsn, std::string& logfile0)
 		return DB_ERROR;
 	}
 
-	ib::info() << "Setting log file " << logfile0 << " size to "
-		   << srv_log_file_size << " bytes";
-
-	ret = os_file_set_size(logfile0.c_str(), file, srv_log_file_size);
+	ret = os_file_set_size(logfile0.c_str(), file, LOG_MAIN_FILE_SIZE);
 	if (!ret) {
 		os_file_close(file);
 		ib::error() << "Cannot set log file " << logfile0
-			    << " size to " << srv_log_file_size << " bytes";
+			    << " size to " << LOG_MAIN_FILE_SIZE << " bytes";
 		return DB_ERROR;
 	}
 
@@ -305,16 +302,20 @@ static dberr_t create_log_file(lsn_t lsn, std::string& logfile0)
 	DBUG_EXECUTE_IF("innodb_log_abort_8", return(DB_ERROR););
 	DBUG_PRINT("ib_log", ("After innodb_log_abort_8"));
 
+	if (dberr_t err = create_data_file(srv_log_file_size)) {
+		return err;
+	}
+
 	/* We did not create the first log file initially as LOG_FILE_NAME, so
 	that crash recovery cannot find it until it has been completed and
-        renamed. */
+	renamed. */
 
 	log_sys.log.create();
 	if (!log_set_capacity(srv_log_file_size_requested)) {
 		return DB_ERROR;
 	}
 
-	log_sys.log.open_file(logfile0);
+	log_sys.log.open_files(logfile0);
 	fil_open_system_tablespace_files();
 
 	/* Create a log checkpoint. */
@@ -326,7 +327,7 @@ static dberr_t create_log_file(lsn_t lsn, std::string& logfile0)
 	log_sys.lsn = ut_uint64_align_up(lsn, OS_FILE_LOG_BLOCK_SIZE);
 
 	log_sys.log.set_lsn(log_sys.lsn);
-	log_sys.log.set_lsn_offset(LOG_FILE_HDR_SIZE);
+	log_sys.log.set_lsn_offset(0);
 
 	log_sys.buf_next_to_write = 0;
 	log_sys.write_lsn = log_sys.lsn;
@@ -370,7 +371,7 @@ static dberr_t create_log_file_rename(lsn_t lsn, std::string &logfile0)
   log_mutex_enter();
   ut_ad(logfile0.size() == 2 + new_name.size());
   logfile0= new_name;
-  dberr_t err= log_sys.log.rename(std::move(new_name));
+  dberr_t err= log_sys.log.main_rename(std::move(new_name));
 
   log_mutex_exit();
 
@@ -1038,7 +1039,7 @@ static lsn_t srv_prepare_to_delete_redo_log_file(bool old_exists)
 		if (do_flush_logs) {
 			log_write_up_to(flushed_lsn, false);
 		}
-		log_sys.log.flush_data_only();
+		log_sys.log.data_flush_data_only();
 
 		ut_ad(flushed_lsn == log_get_lsn());
 
@@ -1112,16 +1113,7 @@ static dberr_t find_and_check_log_file(bool &log_file_found)
     mariabackup --prepare. */
     return DB_NOT_FOUND;
   }
-  /* The first log file must consist of at least the following 512-byte pages:
-  header, checkpoint page 1, empty, checkpoint page 2, redo log page(s).
 
-  Mariabackup --prepare would create an empty LOG_FILE_NAME. Tolerate it. */
-  if (size != 0 && size <= OS_FILE_LOG_BLOCK_SIZE * 4)
-  {
-    ib::error() << "Log file " << logfile0 << " size " << size
-                << " is too small";
-    return DB_ERROR;
-  }
   srv_log_file_size= size;
 
   log_file_found= true;
@@ -1445,7 +1437,7 @@ dberr_t srv_start(bool create_new_db)
 
 		srv_log_file_found = log_file_found;
 
-		log_sys.log.open_file(get_log_file_path());
+		log_sys.log.open_files(get_log_file_path());
 
 		log_sys.log.create();
 
@@ -1532,15 +1524,10 @@ file_checked:
 		been shut down normally: this is the normal startup path */
 
 		err = recv_recovery_from_checkpoint_start(flushed_lsn);
-		recv_sys.close_files();
 
-		if (recv_sys.remove_extra_log_files) {
-			auto log_files_found = recv_sys.files_size();
-			recv_sys.close_files();
-			for (size_t i = 1; i < log_files_found; i++) {
-				delete_log_file(std::to_string(i).c_str());
-			}
-			recv_sys.remove_extra_log_files = false;
+		if (dberr_t err
+		    = recv_sys.upgrade_file_format_to_10_5_if_needed()) {
+			return srv_init_abort(err);
 		}
 
 		recv_sys.dblwr.pages.clear();
@@ -1692,7 +1679,7 @@ file_checked:
 			buf_flush_sync();
 			err = fil_write_flushed_lsn(log_get_lsn());
 			ut_ad(!buf_pool_check_no_pending_io());
-			log_sys.log.close_file();
+			log_sys.log.close_files();
 			if (err == DB_SUCCESS) {
 				bool trunc = srv_operation
 					== SRV_OPERATION_RESTORE;
@@ -1751,8 +1738,9 @@ file_checked:
 				return(srv_init_abort(err));
 			}
 
-			/* Close the redo log file, so that we can replace it */
-			log_sys.log.close_file();
+			/* Close the redo log files, so that we can
+			replace it */
+			log_sys.log.close_files();
 
 			DBUG_EXECUTE_IF("innodb_log_abort_5",
 					return(srv_init_abort(DB_ERROR)););

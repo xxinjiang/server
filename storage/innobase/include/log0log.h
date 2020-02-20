@@ -54,6 +54,12 @@ step which modifies the database, is started */
 
 typedef ulint (*log_checksum_func_t)(const byte* log_block);
 
+/** this is where redo log data is stored (no header, no checkpoints) */
+static const char LOG_DATA_FILE_NAME[] = "ib_logdata";
+
+/** creates LOG_DATA_FILE_NAME with specified size */
+dberr_t create_data_file(os_offset_t size);
+
 static const char LOG_FILE_NAME_PREFIX[] = "ib_logfile";
 static const char LOG_FILE_NAME[] = "ib_logfile0";
 
@@ -443,7 +449,8 @@ or the MySQL version that created the redo log file. */
 #define LOG_CHECKPOINT_2	(3 * OS_FILE_LOG_BLOCK_SIZE)
 					/* second checkpoint field in the log
 					header */
-#define LOG_FILE_HDR_SIZE	(4 * OS_FILE_LOG_BLOCK_SIZE)
+/** size of LOG_FILE_NAME (header + checkpoints */
+constexpr size_t LOG_MAIN_FILE_SIZE= 4 * OS_FILE_LOG_BLOCK_SIZE;
 
 typedef ib_mutex_t	LogSysMutex;
 typedef ib_mutex_t	FlushOrderMutex;
@@ -609,47 +616,52 @@ struct log_t{
     /** redo log subformat: 0 with separately logged TRUNCATE,
     2 with fully redo-logged TRUNCATE (1 in MariaDB 10.2) */
     uint32_t				subformat;
-    /** individual log file size in bytes, including the header */
+    /** log data file size in bytes */
     lsn_t				file_size;
   private:
     /** lsn used to fix coordinates within the log group */
     lsn_t				lsn;
     /** the byte offset of the above lsn */
     lsn_t				lsn_offset;
-    /** log file */
+    /** main log file */
     log_file_t				fd;
+    /** log data file */
+    log_file_t				data_fd;
 
   public:
     /** used only in recovery: recovery scan succeeded up to this
     lsn in this log group */
     lsn_t				scanned_lsn;
 
-    /** opens log file which must be closed prior this call */
-    void open_file(std::string path);
-    /** opens log file which must be closed prior this call */
-    dberr_t rename(std::string path) { return fd.rename(path); }
-    /** reads buffer from log file
-    @param[in]	offset		offset in log file
-    @param[in]	buf		buffer where to read */
-    void read(os_offset_t offset, span<byte> buf);
-    /** Tells whether writes require calling flush_data_only() */
-    bool writes_are_durable() const noexcept;
+    /** opens log files which must be closed prior this call */
+    void open_files(std::string path);
+    /** renames log file */
+    dberr_t main_rename(std::string path) { return fd.rename(path); }
+    /** reads from main log files */
+    void main_read(os_offset_t offset, span<byte> buf);
     /** writes buffer to log file
     @param[in]	offset		offset in log file
     @param[in]	buf		buffer from which to write */
-    void write(os_offset_t offset, span<byte> buf);
+    void main_write_durable(os_offset_t offset, span<byte> buf);
+    /** closes log files */
+    void close_files();
+
+    /** check that log data file is opened */
+    bool data_is_opened() const  { return data_fd.is_opened(); }
+    /** reads from data file */
+    void data_read(os_offset_t offset, span<byte> buf);
+    /** Tells whether writes require calling flush_data_only() */
+    bool data_writes_are_durable() const noexcept;
+    /** writes to data file */
+    void data_write(os_offset_t offset, span<byte> buf);
     /** flushes OS page cache (excluding metadata!) for log file */
-    void flush_data_only();
-    /** closes log file */
-    void close_file();
+    void data_flush_data_only();
 
     /** @return whether the redo log is encrypted */
     bool is_encrypted() const { return format & FORMAT_ENCRYPTED; }
     /** @return whether the redo log is in the physical format */
     bool is_physical() const
     { return (format & ~FORMAT_ENCRYPTED) == FORMAT_10_5; }
-    /** @return capacity in bytes */
-    lsn_t capacity() const{ return file_size - LOG_FILE_HDR_SIZE; }
     /** Calculate the offset of a log sequence number.
     @param[in]	lsn	log sequence number
     @return offset within the log */
@@ -675,7 +687,7 @@ struct log_t{
     void create();
 
     /** Close the redo log buffer. */
-    void close() { close_file(); }
+    void close() { close_files(); }
     void set_lsn(lsn_t a_lsn);
     lsn_t get_lsn() const { return lsn; }
     void set_lsn_offset(lsn_t a_lsn);
@@ -828,16 +840,17 @@ inline lsn_t log_t::file::calc_lsn_offset(lsn_t lsn) const
   /* The lsn parameters are updated while holding both the mutexes
   and it is ok to have either of them while reading */
   ut_ad(log_sys.mutex.is_owned() || log_write_lock_own());
-  const lsn_t size = capacity();
+  const lsn_t size= file_size;
   lsn_t l= lsn - this->lsn;
-  if (longlong(l) < 0) {
-	  l = lsn_t(-longlong(l)) % size;
-	  l = size - l;
+  if (longlong(l) < 0)
+  {
+    l= lsn_t(-longlong(l)) % size;
+    l= size - l;
   }
 
-  l+= lsn_offset - LOG_FILE_HDR_SIZE * (1 + lsn_offset / file_size);
-  l %= size;
-  return l + LOG_FILE_HDR_SIZE * (1 + l / (file_size - LOG_FILE_HDR_SIZE));
+  l+= lsn_offset;
+  l%= size;
+  return l;
 }
 
 inline void log_t::file::set_lsn(lsn_t a_lsn) {

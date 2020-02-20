@@ -12,3 +12,4 @@
 
 innodb_scrub            : MDEV-8139 scrubbing does not work reliably
 innodb_scrub_background : MDEV-8139 scrubbing does not work reliably
+innodb_encrypt_log_corruption : MDEV-14425 upgrade doesn't work yet
