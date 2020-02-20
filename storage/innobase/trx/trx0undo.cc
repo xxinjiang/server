@@ -499,7 +499,7 @@ static void trx_undo_write_xid(buf_block_t *block, uint16_t offset,
 {
   DBUG_ASSERT(xid.gtrid_length >= 0);
   DBUG_ASSERT(xid.bqual_length >= 0);
-  DBUG_ASSERT(xid.gtrid_length + xid.bqual_length < XIDDATASIZE);
+  DBUG_ASSERT(xid.gtrid_length + xid.bqual_length <= XIDDATASIZE);
   DBUG_ASSERT(mach_read_from_2(TRX_UNDO_SEG_HDR + TRX_UNDO_LAST_LOG +
                                block->frame) == offset);
 
@@ -513,6 +513,7 @@ static void trx_undo_write_xid(buf_block_t *block, uint16_t offset,
                            static_cast<uint32_t>(xid.bqual_length));
   const ulint xid_length= static_cast<ulint>(xid.gtrid_length
                                              + xid.bqual_length);
+  if (xid_length)
   mtr->memcpy(*block, &block->frame[offset + TRX_UNDO_XA_XID],
               xid.data, xid_length);
   if (UNIV_LIKELY(xid_length < XIDDATASIZE))

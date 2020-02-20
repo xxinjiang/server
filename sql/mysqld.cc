@@ -5181,6 +5181,16 @@ static int init_server_components()
   }
 #endif
 
+  //TODO - Need review from RUNTIME TEAM - Begin
+  init_update_queries();
+
+  if (acl_init(opt_noacl))
+    unireg_abort(1);
+
+  if (!opt_noacl)
+    (void) grant_init();
+  //TODO - Need review from RUNTIME TEAM - End
+
   tc_log= get_tc_log_implementation();
 
   if (tc_log->open(opt_bin_log ? opt_bin_logname : opt_tc_log_file))
@@ -5189,7 +5199,7 @@ static int init_server_components()
     unireg_abort(1);
   }
 
-  if (ha_recover(0))
+  if (ha_recover(0, 0))
   {
     unireg_abort(1);
   }
@@ -5250,7 +5260,6 @@ static int init_server_components()
   ft_init_stopwords();
 
   init_max_user_conn();
-  init_update_queries();
   init_global_user_stats();
   init_global_client_stats();
   if (!opt_bootstrap)
@@ -5585,13 +5594,9 @@ int mysqld_main(int argc, char **argv)
   */
   start_signal_handler();				// Creates pidfile
 
-  if (mysql_rm_tmp_tables() || acl_init(opt_noacl) ||
+  if (mysql_rm_tmp_tables() ||
       my_tz_init((THD *)0, default_tz_name, opt_bootstrap))
     unireg_abort(1);
-
-  if (!opt_noacl)
-    (void) grant_init();
-
   udf_init();
 
   if (opt_bootstrap) /* If running with bootstrap, do not start replication. */

@@ -2160,7 +2160,7 @@ row_upd_sec_index_entry(
 					err = DB_SUCCESS;
 					break;
 				case DB_LOCK_WAIT:
-					if (wsrep_debug) {
+                                  if (wsrep_get_debug()) {
 						ib::warn() << "WSREP: sec index FK lock wait"
 							   << " index " << index->name
 							   << " table " << index->table->name
