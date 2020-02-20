@@ -296,19 +296,28 @@ struct recv_sys_t{
   /** Last added LSN to pages. */
   lsn_t last_stored_lsn;
 
-  /** After successful upgrade from multiple redo log files we'd like
-  to remove extra ones */
-  bool remove_extra_log_files{false};
+  /** this block should be copied to LOG_DATA_FILE_NAME on upgrade from old
+  file format */
+  void set_block_to_copy(os_offset_t off);
+  /** upgrades file format if needed */
+  dberr_t upgrade_file_format_to_10_5_if_needed();
 
-  void read(os_offset_t offset, span<byte> buf);
+  /** reads from either data file or one of several log files in pre-10.5
+  file format */
+  void read(os_offset_t total_offset, span<byte> buf);
+  /** pre-10.5 files format allowed having multiple log files */
   size_t files_size();
-  void close_files() { files.clear(); }
 
 private:
   /** All found log files (more that one is possible if we're upgrading
   from older MariaDB version */
   std::vector<log_file_t> files;
 
+  /** Last checkpoint in empty pre-10.5 log files points to this block.
+  In old file format it's never 0, because old redo log file has a header. */
+  os_offset_t block_to_copy_when_upgrading_file_format= 0;
+
+  /** used for laziness */
   void open_log_files_if_needed();
 
   /** Maximum number of buffer pool blocks to allocate for redo log records */

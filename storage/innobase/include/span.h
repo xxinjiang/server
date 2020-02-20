@@ -49,12 +49,12 @@ public:
 	}
 
 	template <class Container>
-	span(Container& cont) : data_(cont.begin()), size_(cont.size())
+	span(Container& cont) : data_(cont.data()), size_(cont.size())
 	{
 	}
 
 	template <class Container>
-	span(const Container& cont) : data_(cont.begin()), size_(cont.size())
+	span(const Container& cont) : data_(cont.data()), size_(cont.size())
 	{
 	}
 

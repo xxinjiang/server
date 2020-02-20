@@ -18592,7 +18592,6 @@ checkpoint_now_set(THD*, st_mysql_sys_var*, void*, const void* save)
 		       + SIZE_OF_FILE_CHECKPOINT
 		       < log_sys.lsn) {
 			log_make_checkpoint();
-			log_sys.log.flush_data_only();
 		}
 
 		dberr_t err = fil_write_flushed_lsn(log_sys.lsn);
