@@ -5184,11 +5184,13 @@ static int init_server_components()
   //TODO - Need review from RUNTIME TEAM - Begin
   init_update_queries();
 
+#ifndef NO_EMBEDDED_ACCESS_CHECKS
   if (acl_init(opt_noacl))
     unireg_abort(1);
 
   if (!opt_noacl)
     (void) grant_init();
+#endif
   //TODO - Need review from RUNTIME TEAM - End
 
   tc_log= get_tc_log_implementation();
