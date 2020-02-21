@@ -65,6 +65,17 @@ class String;
 #define PREFIX_SQL_LOAD "SQL_LOAD-"
 #define LONG_FIND_ROW_THRESHOLD 60 /* seconds */
 
+/*
+ * Transaction branch identification: XID and NULLXID:
+ */
+#ifndef XIDDATASIZE
+/** Sizes of transaction identifier */
+#define XIDDATASIZE 128   /*!< maximum size of a transaction
+          identifier, in bytes */
+#define MAXGTRIDSIZE   64   /*!< maximum size in bytes of gtrid */
+#define MAXBQUALSIZE   64   /*!< maximum size in bytes of bqual */
+#endif
+
 /**
    Either assert or return an error.
 
@@ -3234,6 +3245,7 @@ public:
                        const Format_description_log_event *description_event);
   ~XA_prepare_log_event() {}
   Log_event_type get_type_code() { return XA_PREPARE_LOG_EVENT; }
+  bool is_valid() const { return m_xid.formatID != -1; }
   int get_data_size()
   {
     return xid_subheader_no_data + m_xid.gtrid_length + m_xid.bqual_length;

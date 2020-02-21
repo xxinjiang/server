@@ -5184,7 +5184,7 @@ static int init_server_components()
   //TODO - Need review from RUNTIME TEAM - Begin
   init_update_queries();
 
-#ifndef NO_EMBEDDED_ACCESS_CHECKS
+#ifndef EMBEDDED_LIBRARY
   if (acl_init(opt_noacl))
     unireg_abort(1);
 
