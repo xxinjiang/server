@@ -4192,8 +4192,8 @@ void fil_aio_callback(os_aio_userdata_t *data)
 	}
 
 	ulint offset = bpage->id.page_no();
-	if (dblwr && bpage->init_on_flush) {
-		bpage->init_on_flush = false;
+	if (dblwr && bpage->status != NORMAL) {
+		bpage->status = NORMAL;
 		dblwr = false;
 	}
 	dberr_t err = buf_page_io_complete(bpage, dblwr);

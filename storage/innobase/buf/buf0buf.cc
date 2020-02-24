@@ -1356,13 +1356,11 @@ buf_block_init(buf_block_t* block, byte* frame)
 	block->page.state = BUF_BLOCK_NOT_USED;
 	block->page.buf_fix_count = 0;
 	block->page.io_fix = BUF_IO_NONE;
-	block->page.init_on_flush = false;
+	block->page.status = NORMAL;
 	block->page.real_size = 0;
 	block->page.write_size = 0;
 	block->modify_clock = 0;
 	block->page.slot = NULL;
-
-	ut_d(block->page.file_page_was_freed = FALSE);
 
 #ifdef BTR_CUR_HASH_ADAPT
 	block->index = NULL;
@@ -3212,59 +3210,6 @@ void buf_page_make_young(buf_page_t* bpage)
 	mutex_exit(&buf_pool->mutex);
 }
 
-#ifdef UNIV_DEBUG
-/** Sets file_page_was_freed TRUE if the page is found in the buffer pool.
-This function should be called when we free a file page and want the
-debug version to check that it is not accessed any more unless
-reallocated.
-@param[in]	page_id	page id
-@return control block if found in page hash table, otherwise NULL */
-buf_page_t* buf_page_set_file_page_was_freed(const page_id_t page_id)
-{
-	buf_page_t*	bpage;
-	rw_lock_t*	hash_lock;
-
-	bpage = buf_page_hash_get_s_locked(page_id, &hash_lock);
-
-	if (bpage) {
-		BPageMutex*	block_mutex = buf_page_get_mutex(bpage);
-		ut_ad(!buf_pool_watch_is_sentinel(bpage));
-		mutex_enter(block_mutex);
-		rw_lock_s_unlock(hash_lock);
-		/* bpage->file_page_was_freed can already hold
-		when this code is invoked from dict_drop_index_tree() */
-		bpage->file_page_was_freed = TRUE;
-		mutex_exit(block_mutex);
-	}
-
-	return(bpage);
-}
-
-/** Sets file_page_was_freed FALSE if the page is found in the buffer pool.
-This function should be called when we free a file page and want the
-debug version to check that it is not accessed any more unless
-reallocated.
-@param[in]	page_id	page id
-@return control block if found in page hash table, otherwise NULL */
-buf_page_t* buf_page_reset_file_page_was_freed(const page_id_t page_id)
-{
-	buf_page_t*	bpage;
-	rw_lock_t*	hash_lock;
-
-	bpage = buf_page_hash_get_s_locked(page_id, &hash_lock);
-	if (bpage) {
-		BPageMutex*	block_mutex = buf_page_get_mutex(bpage);
-		ut_ad(!buf_pool_watch_is_sentinel(bpage));
-		mutex_enter(block_mutex);
-		rw_lock_s_unlock(hash_lock);
-		bpage->file_page_was_freed = FALSE;
-		mutex_exit(block_mutex);
-	}
-
-	return(bpage);
-}
-#endif /* UNIV_DEBUG */
-
 /** Attempts to discard the uncompressed frame of a compressed page.
 The caller should not be holding any mutexes when this function is called.
 @param[in]	page_id	page id */
@@ -3383,7 +3328,7 @@ got_block:
 
 	rw_lock_s_unlock(hash_lock);
 
-	ut_ad(!bpage->file_page_was_freed);
+	DBUG_ASSERT(bpage->status != FREED);
 
 	buf_page_set_accessed(bpage);
 
@@ -4283,7 +4228,7 @@ evict_from_pool:
 	"btr_search_drop_page_hash_when_freed". */
 	ut_ad(mode == BUF_GET_POSSIBLY_FREED
 	      || mode == BUF_PEEK_IF_IN_POOL
-	      || !fix_block->page.file_page_was_freed);
+	      || fix_block->page.status != FREED);
 
 	/* Check if this is the first access to the page */
 	access_time = buf_page_is_accessed(&fix_block->page);
@@ -4473,10 +4418,6 @@ buf_page_optimistic_get(
 	ut_a(buf_block_get_state(block) == BUF_BLOCK_FILE_PAGE);
 #endif /* UNIV_DEBUG || UNIV_BUF_DEBUG */
 
-	ut_d(buf_page_mutex_enter(block));
-	ut_ad(!block->page.file_page_was_freed);
-	ut_d(buf_page_mutex_exit(block));
-
 	if (!access_time) {
 		/* In the case of a first access, try to apply linear
 		read-ahead */
@@ -4559,10 +4500,6 @@ buf_page_try_get_func(
 	ut_a(buf_block_get_state(block) == BUF_BLOCK_FILE_PAGE);
 #endif /* UNIV_DEBUG || UNIV_BUF_DEBUG */
 
-	ut_d(buf_page_mutex_enter(block));
-	ut_d(ut_a(!block->page.file_page_was_freed));
-	ut_d(buf_page_mutex_exit(block));
-
 	buf_block_dbg_add_level(block, SYNC_NO_ORDER_CHECK);
 
 	buf_pool->stat.n_page_gets++;
@@ -4589,10 +4526,9 @@ buf_page_init_low(
 	bpage->real_size = 0;
 	bpage->slot = NULL;
 	bpage->ibuf_exist = false;
+	bpage->status = NORMAL;
 
 	HASH_INVALIDATE(bpage, hash);
-
-	ut_d(bpage->file_page_was_freed = FALSE);
 }
 
 /** Inits a page to the buffer buf_pool.
@@ -4845,7 +4781,7 @@ buf_page_init_for_read(
 
 		bpage->state = BUF_BLOCK_ZIP_PAGE;
 		bpage->id = page_id;
-		bpage->init_on_flush = false;
+		bpage->status = NORMAL;
 
 		ut_d(bpage->in_page_hash = FALSE);
 		ut_d(bpage->in_zip_hash = FALSE);
@@ -4937,7 +4873,7 @@ buf_page_create(
 	if (block
 	    && buf_page_in_file(&block->page)
 	    && !buf_pool_watch_is_sentinel(&block->page)) {
-		ut_d(block->page.file_page_was_freed = FALSE);
+		block->page.status = NORMAL;
 
 		/* Page can be found in buf_pool */
 		mutex_exit(&buf_pool->mutex);

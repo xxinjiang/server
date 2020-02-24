@@ -4984,7 +4984,7 @@ loop:
 		goto function_exit;
 	}
 
-	ut_ad(!block->page.file_page_was_freed);
+	DBUG_ASSERT(block->page.status != FREED);
 
 	for (i = 0; i < nth_lock; i++) {
 

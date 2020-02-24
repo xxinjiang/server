@@ -402,24 +402,6 @@ buf_page_make_young(
 /*================*/
 	buf_page_t*	bpage);	/*!< in: buffer block of a file page */
 
-#ifdef UNIV_DEBUG
-/** Sets file_page_was_freed TRUE if the page is found in the buffer pool.
-This function should be called when we free a file page and want the
-debug version to check that it is not accessed any more unless
-reallocated.
-@param[in]	page_id	page id
-@return control block if found in page hash table, otherwise NULL */
-buf_page_t* buf_page_set_file_page_was_freed(const page_id_t page_id);
-
-/** Sets file_page_was_freed FALSE if the page is found in the buffer pool.
-This function should be called when we free a file page and want the
-debug version to check that it is not accessed any more unless
-reallocated.
-@param[in]	page_id	page id
-@return control block if found in page hash table, otherwise NULL */
-buf_page_t* buf_page_reset_file_page_was_freed(const page_id_t page_id);
-
-#endif /* UNIV_DEBUG */
 /********************************************************************//**
 Reads the freed_page_clock of a buffer block.
 @return freed_page_clock */
@@ -1201,6 +1183,19 @@ for compressed and uncompressed frames */
 /** Number of bits used for buffer page states. */
 #define BUF_PAGE_STATE_BITS	3
 
+enum page_status_t {
+	NORMAL,
+	/** whether the page will be (re)initialized at the time it will
+	be written to the file, that is, whether the doublewrite buffer
+	can be safely skipped. Protected under similar conditions as
+	buf_block_t::frame. Can be set while holding buf_block_t::lock
+	X-latch and reset during page flush, while io_fix is in effect. */
+	INIT_ON_FLUSH,
+	/** FSP frees a page in buffer pool. protected by
+	buf_pool->zip_mutex or buf_block_t::mutex */
+	FREED
+};
+
 class buf_page_t {
 public:
 	/** @name General fields
@@ -1244,12 +1239,7 @@ public:
 					if written again we check is TRIM
 					operation needed. */
 
-	/** whether the page will be (re)initialized at the time it will
-	be written to the file, that is, whether the doublewrite buffer
-	can be safely skipped. Protected under similar conditions as
-	buf_block_t::frame. Can be set while holding buf_block_t::lock
-	X-latch and reset during page flush, while io_fix is in effect. */
-	bool		init_on_flush;
+	page_status_t	status;
 
 	ulint           real_size;	/*!< Real size of the page
 					Normal pages == srv_page_size
@@ -1365,13 +1355,6 @@ public:
 					and bytes allocated for recv_sys.pages,
 					the field is protected by
 					recv_sys_t::mutex. */
-# ifdef UNIV_DEBUG
-	ibool		file_page_was_freed;
-					/*!< this is set to TRUE when
-					fsp frees a page in buffer pool;
-					protected by buf_pool->zip_mutex
-					or buf_block_t::mutex. */
-# endif /* UNIV_DEBUG */
   /** Change buffer entries for the page exist.
   Protected by io_fix==BUF_IO_READ or by buf_block_t::lock. */
   bool ibuf_exist;

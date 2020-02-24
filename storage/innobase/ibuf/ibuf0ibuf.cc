@@ -1948,8 +1948,6 @@ ibuf_remove_free_page(void)
 
 	const page_id_t	page_id(IBUF_SPACE_ID, page_no);
 
-	ut_d(buf_page_reset_file_page_was_freed(page_id));
-
 	ibuf_enter(&mtr);
 
 	mutex_enter(&ibuf_mutex);
@@ -1981,8 +1979,6 @@ ibuf_remove_free_page(void)
 
 	ibuf_bitmap_page_set_bits<IBUF_BITMAP_IBUF>(
 		bitmap_page, page_id, srv_page_size, false, &mtr);
-
-	ut_d(buf_page_set_file_page_was_freed(page_id));
 
 	ibuf_mtr_commit(&mtr);
 }
