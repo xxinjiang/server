@@ -510,22 +510,15 @@ inline void mtr_t::init(buf_block_t *b)
 
   m_log.close(log_write<INIT_PAGE>(b->page.id, &b->page));
   m_last_offset= FIL_PAGE_TYPE;
-  b->page.status = INIT_ON_FLUSH;
+  b->page.status= INIT_ON_FLUSH;
 }
 
 /** Free a page.
-@param id      page identifier
-@param block   block descriptor or NULL if drop page
-	       doesn't exist in buffer pool */
-inline void mtr_t::free(const page_id_t id, buf_block_t* block)
+@param id      page identifier */
+inline void mtr_t::free(const page_id_t id)
 {
   if (m_log_mode == MTR_LOG_ALL)
     m_log.close(log_write<FREE_PAGE>(id, nullptr));
-
-  fprintf(stderr, "freeing id %d:%d block %p\n",
-	  id.space(), id.page_no(), block);
-  if (block)
-    block->page.status = FREED;
 }
 
 /** Write an EXTENDED log record.

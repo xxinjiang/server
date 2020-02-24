@@ -4507,6 +4507,63 @@ buf_page_try_get_func(
 	return(block);
 }
 
+/** Mark the page status as FREED for the given tablespace id and
+page number. If the page is not in the buffer pool then ignore it.
+@param[in]	page_id	page id
+@param[in,out]	mtr	mini-transaction
+@param[in]	file	file name
+@param[in]	line	line where called */
+void buf_page_free(
+	const page_id_t page_id,
+	mtr_t*		mtr,
+	const char*	file,
+	unsigned 	line)
+{
+	buf_block_t*	block;
+	rw_lock_t*	hash_lock;
+
+	ut_ad(mtr);
+	ut_ad(mtr->is_active());
+
+	buf_pool->stat.n_page_gets++;
+	hash_lock = buf_page_hash_lock_get(page_id);
+	rw_lock_s_lock(hash_lock);
+
+	/* page_hash can be changed. */
+	hash_lock = buf_page_hash_lock_s_confirm(hash_lock, page_id);
+
+	block = (buf_block_t*) buf_page_hash_get_low(page_id);
+
+	if (!block) {
+		/* Page is not in buffer pool */
+		rw_lock_s_unlock(hash_lock);
+		return;
+	}
+	block->fix();
+
+	/* Now safe to release page_hash mutex */
+	rw_lock_s_unlock(hash_lock);
+
+	ut_ad(block->page.buf_fix_count > 0);
+
+#ifdef UNIV_DEBUG
+	if (!fsp_is_system_temporary(page_id.space())) {
+		ibool   ret;
+		ret = rw_lock_s_lock_nowait(
+			block->debug_latch, file, line);
+		ut_a(ret);
+	}
+#endif /* UNIV_DEBUG */
+
+	mtr_memo_type_t	fix_type = MTR_MEMO_PAGE_X_FIX;
+	rw_lock_x_lock_inline(&block->lock, 0, file, line);
+	mtr_memo_push(mtr, block, fix_type);
+
+	block->page.status = FREED;
+	buf_block_dbg_add_level(block, SYNC_NO_ORDER_CHECK);
+	buf_pool->stat.n_page_gets++;
+}
+
 /********************************************************************//**
 Initialize some fields of a control block. */
 UNIV_INLINE

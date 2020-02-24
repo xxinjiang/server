@@ -1262,14 +1262,11 @@ static void fsp_free_page(fil_space_t* space, page_no_t offset, mtr_t* mtr)
 		return;
 	}
 
-	page_id_t drop_page_id(space->id, offset);
-
-	buf_block_t* block = buf_page_get_gen(
-			drop_page_id, 0, RW_X_LATCH, NULL,
-			BUF_GET_IF_IN_POOL, __FILE__, __LINE__,
-			mtr, NULL);
-
-	mtr->free(drop_page_id, block);
+	{
+		const page_id_t page_id(space->id, offset);
+		mtr->free(page_id);
+		buf_page_free(page_id, mtr, __FILE__, __LINE__);
+	}
 
 	const ulint	bit = offset % FSP_EXTENT_SIZE;
 
@@ -2733,14 +2730,10 @@ fseg_free_extent(
 
 	for (ulint i = 0; i < FSP_EXTENT_SIZE; i++) {
 		if (!xdes_is_free(descr, i)) {
-			const page_id_t drop_page_id(
+			const page_id_t page_id(
 				space->id, first_page_in_extent + i);
-
-			buf_block_t* block = buf_page_get_gen(
-				drop_page_id, 0, RW_X_LATCH, NULL,
-				BUF_GET_IF_IN_POOL, __FILE__, __LINE__,
-				mtr, NULL);
-			mtr->free(drop_page_id, block);
+			mtr->free(page_id);
+			buf_page_free(page_id, mtr, __FILE__, __LINE__);
 		}
 	}
 
@@ -2840,10 +2833,10 @@ fseg_free_step_func(
 		DBUG_RETURN(true);
 	}
 
-	ulint offset = fseg_get_nth_frag_page_no(inode, n, mtr);
-
 	fseg_free_page_low(
-		inode, iblock, space, offset, ahi, mtr);
+		inode, iblock, space,
+		fseg_get_nth_frag_page_no(inode, n, mtr),
+		ahi, mtr);
 
 	n = fseg_find_last_used_frag_page_slot(inode, mtr);
 

@@ -1117,7 +1117,7 @@ buf_flush_write_block_low(
 
 	if (bpage->status == FREED) {
 		/** Zero out the page if the page is freed */
-		memset(frame, 0, bpage->physical_size());
+		frame = const_cast<byte*>(field_ref_zero);
 	}
 
 	const bool use_doublewrite = (bpage->status == NORMAL)
@@ -1203,6 +1203,7 @@ bool buf_flush_page(buf_page_t* bpage, buf_flush_t flush_type, bool sync)
 	shutting down */
 	if (!srv_undo_sources
 	    && fsp_is_system_temporary(bpage->id.space())) {
+remove_flush:
 		buf_flush_remove(bpage);
 		return false;
 	}
@@ -1210,13 +1211,12 @@ bool buf_flush_page(buf_page_t* bpage, buf_flush_t flush_type, bool sync)
 	/* Ignore the flushing of freed page */
 	if (bpage->status == FREED) {
 		if (!srv_immediate_scrub_data_uncompressed) {
-			buf_flush_remove(bpage);
-			return false;
+			goto remove_flush;
 		}
 	}
 
-	bool	is_uncompressed = (buf_page_get_state(bpage)
-				   == BUF_BLOCK_FILE_PAGE);
+	const bool is_uncompressed = (buf_page_get_state(bpage)
+				      == BUF_BLOCK_FILE_PAGE);
 
 	ut_ad(is_uncompressed == (block_mutex != &buf_pool->zip_mutex));
 

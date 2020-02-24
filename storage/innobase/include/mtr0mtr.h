@@ -488,9 +488,8 @@ struct mtr_t {
   @param[in,out]        b       buffer page */
   void init(buf_block_t *b);
   /** Free a page.
-  @param id      page identifier
-  @param block	 buffer block */
-  inline void free(const page_id_t id, buf_block_t *block);
+  @param id      page identifier */
+  inline void free(const page_id_t id);
   /** Partly initialize a B-tree page.
   @param block    B-tree page
   @param comp     false=ROW_FORMAT=REDUNDANT, true=COMPACT or DYNAMIC */

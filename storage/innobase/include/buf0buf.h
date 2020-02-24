@@ -336,6 +336,18 @@ the same set of mutexes or latches.
 @return pointer to the block */
 buf_page_t* buf_page_get_zip(const page_id_t page_id, ulint zip_size);
 
+/** Mark the page status as FREED for the given tablespace id and
+page number. If the page is not in the buffer pool then ignore it.
+@param[in]	page_id	page id
+@param[in,out]	mtr	mini-transaction
+@param[in]	file	file name
+@param[in]	line	line where called */
+void buf_page_free(
+	const page_id_t page_id,
+	mtr_t*		mtr,
+	const char*	file,
+	unsigned	line);
+
 /** This is the general function used to get access to a database page.
 @param[in]	page_id			page id
 @param[in]	zip_size		ROW_FORMAT=COMPRESSED page size, or 0
@@ -1192,7 +1204,7 @@ enum page_status_t {
 	X-latch and reset during page flush, while io_fix is in effect. */
 	INIT_ON_FLUSH,
 	/** FSP frees a page in buffer pool. protected by
-	buf_pool->zip_mutex or buf_block_t::mutex */
+	buf_pool_t::zip_mutex or buf_block_t::mutex */
 	FREED
 };
 
