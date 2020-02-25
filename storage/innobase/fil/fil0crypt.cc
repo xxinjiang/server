@@ -1985,10 +1985,13 @@ static void fil_crypt_complete_rotate_space(rotate_thread_t* state)
 			crypt_data->rotate_state.flushing = true;
 			crypt_data->min_key_version =
 				crypt_data->rotate_state.min_key_version_found;
+			mutex_exit(&crypt_data->mutex);
 			fil_crypt_flush_space(state);
 
 			mutex_enter(&crypt_data->mutex);
 			crypt_data->rotate_state.flushing = false;
+			mutex_exit(&crypt_data->mutex);
+		} else {
 			mutex_exit(&crypt_data->mutex);
 		}
 	} else {
