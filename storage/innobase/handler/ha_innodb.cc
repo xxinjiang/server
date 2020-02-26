@@ -3419,7 +3419,7 @@ static const char* innodb_log_optimize_ddl_msg
 static ulong innodb_undo_logs;
 /** deprecation message for innodb_undo_logs */
 static const char* innodb_undo_logs_msg
-= "the parameter innodb_undo_logs is deprecated and has no effect.";
+= "The parameter innodb_undo_logs is deprecated and has no effect.";
 /** Deprecated parameter with no effect */
 static ulong innodb_buffer_pool_instances;
 /** Deprecated parameter with no effect */
