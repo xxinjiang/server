@@ -10072,6 +10072,7 @@ ha_partition::check_if_supported_inplace_alter(TABLE *altered_table,
   enum_alter_inplace_result result= HA_ALTER_INPLACE_NO_LOCK;
   ha_partition_inplace_ctx *part_inplace_ctx;
   bool first_is_set= false;
+  bool force= ha_alter_info->handler_flags & ALTER_RECREATE;
   THD *thd= ha_thd();
 
   DBUG_ENTER("ha_partition::check_if_supported_inplace_alter");
@@ -10101,6 +10102,7 @@ ha_partition::check_if_supported_inplace_alter(TABLE *altered_table,
     part_inplace_ctx->handler_ctx_array[index]= NULL;
 
   ha_alter_info->handler_flags |= ALTER_PARTITIONED;
+recheck_support_alter:
   for (index= 0; index < m_tot_parts; index++)
   {
     enum_alter_inplace_result p_result=
@@ -10118,10 +10120,21 @@ ha_partition::check_if_supported_inplace_alter(TABLE *altered_table,
       DBUG_ASSERT(0);
       DBUG_RETURN(HA_ALTER_ERROR);
     }
+
     if (p_result < result)
+    {
       result= p_result;
+      force= (result == HA_ALTER_INPLACE_COPY_NO_LOCK
+              || result == HA_ALTER_INPLACE_COPY_LOCK);
+    }
     if (result == HA_ALTER_ERROR)
       break;
+  }
+
+  if (force && !(ha_alter_info->handler_flags & ALTER_RECREATE))
+  {
+    ha_alter_info->handler_flags|= ALTER_RECREATE;
+    goto recheck_support_alter;
   }
 
   ha_alter_info->handler_ctx= part_inplace_ctx;
