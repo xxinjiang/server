@@ -3506,6 +3506,39 @@ drop table t1;
 #
 create table t1 (a bigint, b bigint, c bigint);
 insert into t1 select seq, seq, seq  from seq_1_to_100;
+# in r_sort_mode it should show sort_key and not packed_sort_key
+ANALYZE FORMAT=JSON select * from t1 order by a,b,c;
+ANALYZE
+{
+  "query_block": {
+    "select_id": 1,
+    "r_loops": 1,
+    "r_total_time_ms": 0.6215,
+    "read_sorted_file": {
+      "r_rows": 100,
+      "filesort": {
+        "sort_key": "t1.a, t1.b, t1.c",
+        "r_loops": 1,
+        "r_total_time_ms": 0.3724,
+        "r_used_priority_queue": false,
+        "r_output_rows": 100,
+        "r_buffer_size": "6Kb",
+        "r_sort_mode": "sort_key,packed_addon_fields",
+        "table": {
+          "table_name": "t1",
+          "access_type": "ALL",
+          "r_loops": 1,
+          "rows": 100,
+          "r_rows": 100,
+          "r_table_time_ms": 0.0982,
+          "r_other_time_ms": 0.1854,
+          "filtered": 100,
+          "r_filtered": 100
+        }
+      }
+    }
+  }
+}
 select * from t1 order by a,b,c;
 a	b	c
 1	1	1

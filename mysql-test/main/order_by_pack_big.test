@@ -141,12 +141,12 @@ set sort_buffer_size= 2097152;
 --source include/analyze-format.inc
 eval ANALYZE FORMAT=JSON  SELECT id, names, address FROM t3 ORDER BY names, address;
 flush status;
-eval SELECT id, names, address INTO OUTFILE '$file1' FROM t3 ORDER BY names, address;
+evalp SELECT id, names, address INTO OUTFILE '$file1' FROM t3 ORDER BY names, address;
 
 --echo # Sort_merge_passes should be 0
 show status like '%sort%';
 
-eval SELECT id, names, address INTO OUTFILE '$file2' FROM t3 FORCE INDEX(idx) ORDER BY names, address;
+evalp SELECT id, names, address INTO OUTFILE '$file2' FROM t3 FORCE INDEX(idx) ORDER BY names, address;
 
 diff_files $file1 $file2;
 
@@ -163,7 +163,7 @@ set sort_buffer_size= 1097152;
 --source include/analyze-format.inc
 eval ANALYZE FORMAT=JSON  SELECT id, names, address FROM t3 ORDER BY names, address;
 flush status;
-eval SELECT id, names, address INTO OUTFILE '$file1' FROM t3 ORDER BY names, address;
+evalp SELECT id, names, address INTO OUTFILE '$file1' FROM t3 ORDER BY names, address;
 
 --echo # Sort_merge_passes should be 0
 show status like '%sort%';

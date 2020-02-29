@@ -431,7 +431,7 @@ ANALYZE
   }
 }
 flush status;
-SELECT id, names, address INTO OUTFILE '/Users/varun/MariaDB/maria-dev/mysql-test/var/mysqld.1/data/t1.txt' FROM t3 ORDER BY names, address;
+SELECT id, names, address INTO OUTFILE '$file1' FROM t3 ORDER BY names, address;
 # Sort_merge_passes should be 0
 show status like '%sort%';
 Variable_name	Value
@@ -440,7 +440,7 @@ Sort_priority_queue_sorts	0
 Sort_range	0
 Sort_rows	10000
 Sort_scan	1
-SELECT id, names, address INTO OUTFILE '/Users/varun/MariaDB/maria-dev/mysql-test/var/mysqld.1/data/t2.txt' FROM t3 FORCE INDEX(idx) ORDER BY names, address;
+SELECT id, names, address INTO OUTFILE '$file2' FROM t3 FORCE INDEX(idx) ORDER BY names, address;
 #
 # CASE #2 Packed sort keys and ROW_ID
 #
@@ -480,7 +480,7 @@ ANALYZE
   }
 }
 flush status;
-SELECT id, names, address INTO OUTFILE '/Users/varun/MariaDB/maria-dev/mysql-test/var/mysqld.1/data/t1.txt' FROM t3 ORDER BY names, address;
+SELECT id, names, address INTO OUTFILE '$file1' FROM t3 ORDER BY names, address;
 # Sort_merge_passes should be 0
 show status like '%sort%';
 Variable_name	Value

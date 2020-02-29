@@ -2324,6 +2324,9 @@ drop table t1;
 
 create table t1 (a bigint, b bigint, c bigint);
 insert into t1 select seq, seq, seq  from seq_1_to_100;
+
+--echo # in r_sort_mode it should show sort_key and not packed_sort_key
+ANALYZE FORMAT=JSON select * from t1 order by a,b,c;
 select * from t1 order by a,b,c;
 
 drop table t1;
