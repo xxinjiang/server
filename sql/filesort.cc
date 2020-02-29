@@ -176,7 +176,7 @@ SORT_INFO *filesort(THD *thd, TABLE *table, Filesort *filesort,
   Bounded_queue<uchar, uchar> pq;
   SQL_SELECT *const select= filesort->select;
   ha_rows max_rows= filesort->limit;
-  size_t s_length= 0;
+  uint s_length= 0;
   Sort_keys *sort_keys;
 
   DBUG_ENTER("filesort");
@@ -184,7 +184,7 @@ SORT_INFO *filesort(THD *thd, TABLE *table, Filesort *filesort,
   if (!(sort_keys= filesort->make_sortorder(thd, join, first_table_bit)))
     DBUG_RETURN(NULL);  /* purecov: inspected */
 
-  s_length= sort_keys->size();
+  s_length= static_cast<uint>(sort_keys->size());
 
   DBUG_EXECUTE("info",TEST_filesort(filesort->sortorder, s_length););
 #ifdef SKIP_DBUG_IN_FILESORT
