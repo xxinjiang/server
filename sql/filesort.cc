@@ -2530,7 +2530,8 @@ void SORT_INFO::free_addon_buff()
 */
 bool SORT_INFO::using_packed_sortkeys()
 {
-  return sort_keys && sort_keys->using_packed_sortkeys();
+  DBUG_ASSERT(sort_keys);
+  return sort_keys->using_packed_sortkeys();
 }
 
 /**
