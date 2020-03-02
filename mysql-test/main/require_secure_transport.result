@@ -1,0 +1,4 @@
+CREATE TABLE t1 (t int(1));
+ERROR 28000: Access denied for user 'root'@'localhost' (using password: NO)
+connection default;
+DROP TABLE t1;
