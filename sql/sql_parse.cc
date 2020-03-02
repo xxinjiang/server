@@ -4940,7 +4940,8 @@ mysql_execute_command(THD *thd)
       if (!(thd->client_capabilities & CLIENT_LOCAL_FILES) ||
           !opt_local_infile)
       {
-	my_message(ER_NOT_ALLOWED_COMMAND, ER_THD(thd, ER_NOT_ALLOWED_COMMAND), MYF(0));
+	my_message(ER_LOAD_INFILE_CAPABILITY_DISABLED, 
+             ER_THD(thd, ER_LOAD_INFILE_CAPABILITY_DISABLED), MYF(0));
 	goto error;
       }
     }
