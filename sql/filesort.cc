@@ -50,7 +50,8 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
 static bool write_keys(THD *thd, Sort_param *param, SORT_INFO *fs_info,
                       uint count, IO_CACHE *buffer_file, IO_CACHE *tempfile,
                       Filesort_tracker *tracker);
-static uint make_sortkey(Sort_param *param, uchar *to, uchar *ref_pos);
+static uint make_sortkey(Sort_param *param, uchar *to, uchar *ref_pos,
+                         bool using_packed_sortkeys= false);
 static uint make_sortkey(Sort_param *param, uchar *to);
 static uint make_packed_sortkey(Sort_param *param, uchar *to);
 
@@ -806,6 +807,7 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
   ha_rows num_records= 0;
   const bool packing_format= (param->using_packed_addons() ||
                               param->using_packed_sortkeys());
+  const bool using_packed_sortkeys= param->using_packed_sortkeys();
 
   DBUG_ENTER("find_all_keys");
   DBUG_PRINT("info",("using: %s",
@@ -933,7 +935,8 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
           fs_info->init_next_record_pointer();
         uchar *start_of_rec= fs_info->get_next_record_pointer();
 
-        const uint rec_sz= make_sortkey(param, start_of_rec, ref_pos);
+        const uint rec_sz= make_sortkey(param, start_of_rec,
+                                        ref_pos, using_packed_sortkeys);
         if (packing_format && rec_sz != param->rec_length)
           fs_info->adjust_next_record_pointer(rec_sz);
         idx++;
@@ -1356,14 +1359,15 @@ Type_handler_real_result::make_sort_key(uchar *to, Item *item,
 
 /** Make a sort-key from record. */
 
-static uint make_sortkey(Sort_param *param, uchar *to, uchar *ref_pos)
+static uint make_sortkey(Sort_param *param, uchar *to, uchar *ref_pos,
+                         bool using_packed_sortkeys)
 {
   Field *field;
   SORT_FIELD *sort_field;
   uint length;
   uchar *orig_to= to;
 
-  to+= param->using_packed_sortkeys() ?
+  to+= using_packed_sortkeys ?
        make_packed_sortkey(param, to) :
        make_sortkey(param, to);
 
