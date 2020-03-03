@@ -1081,38 +1081,6 @@ void store_length(uchar *to, uint length, uint pack_length)
   }
 }
 
-/*
-  @brief
-    Helper function to create sort key for Fields
-
-  @param  order_by_type  type in which values are written to buffer
-  @param  buff           buffer where values are written
-  @param  item           sort column
-  @param  sort_field     sort column structure
-  @param  sort_param     Sort param structure
-
-  @retval
-    length of the bytes written, does not include the NULL bytes
-*/
-
-uint
-Type_handler::make_sort_key(enum sort_method_t order_by_type, uchar *to,
-                            Item *item, const SORT_FIELD_ATTR *sort_field,
-                            Sort_param *sort_param) const
-{
-  switch (order_by_type)
-  {
-    case ORDER_BY_STRXFRM:
-      return make_sort_key(to, item, sort_field, sort_param);
-    case ORDER_BY_ORIGINAL:
-      return make_packed_sort_key(to, item, sort_field, sort_param);
-    default:
-      DBUG_ASSERT(0);
-      break;
-  }
-  return 0;
-}
-
 
 uint
 Type_handler_string_result::make_sort_key(uchar *to, Item *item,
@@ -3031,9 +2999,8 @@ static uint make_sortkey(Sort_param *param, uchar *to)
     }
     else
     {           // Item
-      Item *item= sort_field->item;
-      length= item->type_handler()->make_sort_key(to, item,
-                                                  sort_field, param);
+      sort_field->item->type_handler()->make_sort_key(to, sort_field->item,
+                                                      sort_field, sort_param);
       if ((maybe_null= sort_field->item->maybe_null))
         to++;
     }
@@ -3080,7 +3047,7 @@ static uint make_packed_sortkey(Sort_param *param, uchar *to)
     to+= length;
   }
 
-  length= static_cast<int>(to - orig_to);
-  DBUG_ASSERT(length <= param->sort_length);
-  return length;
+  DBUG_ASSERT(static_cast<int>(to - orig_to) <= param->sort_length);
+  return static_cast<int>(to - orig_to);
+;
 }

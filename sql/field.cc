@@ -1013,17 +1013,6 @@ CPP_UNNAMED_NS_END
   Static help functions
 *****************************************************************************/
 
-/*
-  @brief
-    Helper function to create sort key for Fields
-
-  @param  order_by_type  type in which values are written to buffer
-  @param  buff           buffer where values are written
-  @param  sort_field     sort column structure
-
-  @retval
-    length of the bytes written, does not include the NULL bytes
-*/
 
 void Field::make_sort_key(uchar *buff,uint length)
 {

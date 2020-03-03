@@ -3768,9 +3768,6 @@ public:
   virtual uint make_sort_key(uchar *to, Item *item,
                              const SORT_FIELD_ATTR *sort_field,
                              Sort_param *param) const= 0;
-  uint make_sort_key(enum sort_method_t order_by_type, uchar *to, Item *item,
-                     const SORT_FIELD_ATTR *sort_field,
-                     Sort_param *param)const;
 
   virtual void sort_length(THD *thd,
                           const Type_std_attributes *item,

@@ -321,7 +321,6 @@ private:
     images of fields?
   */
   uint sort_length;
-  enum sort_method_t order_by_type;  // order by strategy used
 };
 
 
