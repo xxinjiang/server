@@ -805,8 +805,8 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
   MY_BITMAP *save_read_set, *save_write_set;
   Item *sort_cond;
   ha_rows num_records= 0;
-  const bool packing_format= (param->using_packed_addons() ||
-                              param->using_packed_sortkeys());
+  const bool packed_format= (param->using_packed_addons() ||
+                             param->using_packed_sortkeys());
   const bool using_packed_sortkeys= param->using_packed_sortkeys();
 
   DBUG_ENTER("find_all_keys");
@@ -937,7 +937,7 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
 
         const uint rec_sz= make_sortkey(param, start_of_rec,
                                         ref_pos, using_packed_sortkeys);
-        if (packing_format && rec_sz != param->rec_length)
+        if (packed_format && rec_sz != param->rec_length)
           fs_info->adjust_next_record_pointer(rec_sz);
         idx++;
       }
@@ -1663,7 +1663,7 @@ cleanup:
 */
 
 ulong read_to_buffer(IO_CACHE *fromfile, Merge_chunk *buffpek,
-                     Sort_param *param)
+                     Sort_param *param, bool packed_format)
 {
   ha_rows count;
   uint rec_length= param->rec_length;
@@ -1671,7 +1671,7 @@ ulong read_to_buffer(IO_CACHE *fromfile, Merge_chunk *buffpek,
   if ((count= MY_MIN(buffpek->max_keys(),buffpek->rowcount())))
   {
     size_t bytes_to_read;
-    if (param->using_packed_addons() || param->using_packed_sortkeys())
+    if (packed_format)
     {
       count= buffpek->rowcount();
       bytes_to_read= MY_MIN(buffpek->buffer_size(),
@@ -1687,7 +1687,7 @@ ulong read_to_buffer(IO_CACHE *fromfile, Merge_chunk *buffpek,
 
     size_t num_bytes_read;
 
-    if (param->using_packed_addons() || param->using_packed_sortkeys())
+    if (packed_format)
     {
       /*
         The last record read is most likely not complete here.
@@ -1826,6 +1826,12 @@ bool merge_buffers(Sort_param *param, IO_CACHE *from_file,
            (flag && min_dupl_count ? sizeof(dupl_count) : 0)-res_length);
   uint wr_len= flag ? res_length : rec_length;
   uint wr_offset= flag ? offset : 0;
+
+  const bool using_packed_sortkeys= param->using_packed_sortkeys();
+  bool offset_for_packing= (flag == 1 && using_packed_sortkeys);
+  const bool packed_format= (param->using_packed_addons() ||
+                             param->using_packed_sortkeys());
+
   maxcount= (ulong) (param->max_keys_per_buffer/((uint) (Tb-Fb) +1));
   to_start_filepos= my_b_tell(to_file);
   strpos= sort_buffer.array();
@@ -1853,7 +1859,7 @@ bool merge_buffers(Sort_param *param, IO_CACHE *from_file,
                         strpos + (sort_buffer.size()/((uint) (Tb-Fb) +1)));
 
     buffpek->set_max_keys(maxcount);
-    bytes_read= read_to_buffer(from_file, buffpek, param);
+    bytes_read= read_to_buffer(from_file, buffpek, param, packed_format);
     if (unlikely(bytes_read == (ulong) -1))
       goto err;					/* purecov: inspected */
     strpos+= bytes_read;
@@ -1880,7 +1886,7 @@ bool merge_buffers(Sort_param *param, IO_CACHE *from_file,
     if (buffpek->mem_count() == 0)
     {
       if (unlikely(!(bytes_read= read_to_buffer(from_file, buffpek,
-                                                param))))
+                                                param, packed_format))))
       {
         (void) queue_remove_top(&queue);
         reuse_freed_buff(&queue, buffpek, rec_length);
@@ -1939,12 +1945,9 @@ bool merge_buffers(Sort_param *param, IO_CACHE *from_file,
         if (!check_dupl_count || dupl_count >= min_dupl_count)
         {
           if(my_b_write(to_file,
-                        src +
-                        (
-                          (flag == 1 && param->using_packed_sortkeys()) ?
-                          rec_length - res_length:  // sort length
-                          wr_offset
-                        ),
+                        src + (offset_for_packing ?
+                               rec_length - res_length :  // sort length
+                               wr_offset),
                         bytes_to_write))
             goto err;                           /* purecov: inspected */
         }
@@ -1968,7 +1971,7 @@ bool merge_buffers(Sort_param *param, IO_CACHE *from_file,
       if (buffpek->mem_count() == 0)
       {
         if (unlikely(!(bytes_read= read_to_buffer(from_file, buffpek,
-                                                  param))))
+                                                  param, packed_format))))
         {
           (void) queue_remove_top(&queue);
           reuse_freed_buff(&queue, buffpek, rec_length);
@@ -2041,20 +2044,17 @@ bool merge_buffers(Sort_param *param, IO_CACHE *from_file,
           continue;
       }
       if(my_b_write(to_file,
-                    src +
-                    (
-                      (flag == 1 && param->using_packed_sortkeys()) ?
-                      rec_length - res_length:         // sort length
-                      wr_offset
-                    ),
+                    src + (offset_for_packing ?
+                           rec_length - res_length :     // sort length
+                           wr_offset),
                     bytes_to_write))
         goto err;
       buffpek->advance_current_key(rec_length);
     }
   }
   while (likely(!(error=
-                  (bytes_read= read_to_buffer(from_file, buffpek,
-                                              param)) == (ulong) -1)) &&
+                  (bytes_read= read_to_buffer(from_file, buffpek, param,
+                                           packed_format)) == (ulong) -1)) &&
          bytes_read != 0);
 
 end:

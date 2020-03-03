@@ -467,11 +467,18 @@ public:
    */
   void get_rec_and_res_len(uchar *record_start, uint *recl, uint *resl)
   {
+    if (m_using_packed_addons || m_using_packed_sortkeys)
+    {
+      *recl= rec_length;
+      *resl= res_length;
+      return;
+    }
     uint sort_length= get_sort_length(record_start);
     uint addon_length= get_addon_length(record_start + sort_length);
     *recl= sort_length + addon_length;
     *resl= using_addon_fields() ? addon_length : res_length;
   }
+
   void try_to_pack_sortkeys();
 
   qsort2_cmp get_compare_function() const
@@ -499,7 +506,7 @@ typedef Bounds_checked_array<uchar> Sort_buffer;
 int merge_many_buff(Sort_param *param, Sort_buffer sort_buffer,
                     Merge_chunk *buffpek, uint *maxbuffer, IO_CACHE *t_file);
 ulong read_to_buffer(IO_CACHE *fromfile, Merge_chunk *buffpek,
-                     Sort_param *param);
+                     Sort_param *param, bool packing_format);
 bool merge_buffers(Sort_param *param,IO_CACHE *from_file,
                    IO_CACHE *to_file, Sort_buffer sort_buffer,
                    Merge_chunk *lastbuff, Merge_chunk *Fb,
