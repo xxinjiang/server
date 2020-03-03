@@ -302,7 +302,16 @@ static dberr_t create_log_file(lsn_t lsn, std::string& logfile0)
 	DBUG_EXECUTE_IF("innodb_log_abort_8", return(DB_ERROR););
 	DBUG_PRINT("ib_log", ("After innodb_log_abort_8"));
 
-	if (dberr_t err = create_data_file(srv_log_file_size)) {
+	if (dberr_t err = create_log_file(
+		get_log_file_path(LOG_DATA_FILE_NAME).c_str(),
+		srv_log_file_size)) {
+		return err;
+	}
+
+	if (dberr_t err = redo::redo_t::create_files(srv_log_file_size)) {
+		return err;
+	}
+	if (dberr_t err = redo::new_redo.initialize_files()) {
 		return err;
 	}
 
@@ -316,6 +325,7 @@ static dberr_t create_log_file(lsn_t lsn, std::string& logfile0)
 	}
 
 	log_sys.log.open_files(logfile0);
+	redo::new_redo.open_files();
 	fil_open_system_tablespace_files();
 
 	/* Create a log checkpoint. */
@@ -1440,6 +1450,7 @@ dberr_t srv_start(bool create_new_db)
 		srv_log_file_found = log_file_found;
 
 		log_sys.log.open_files(get_log_file_path());
+		redo::new_redo.open_files();
 
 		log_sys.log.create();
 
@@ -1682,6 +1693,7 @@ file_checked:
 			err = fil_write_flushed_lsn(log_get_lsn());
 			ut_ad(!buf_pool_check_no_pending_io());
 			log_sys.log.close_files();
+			redo::new_redo.close_files();
 			if (err == DB_SUCCESS) {
 				bool trunc = srv_operation
 					== SRV_OPERATION_RESTORE;
@@ -2154,6 +2166,7 @@ void innodb_shutdown()
 #endif /* BTR_CUR_HASH_ADAPT */
 	ibuf_close();
 	log_sys.close();
+	redo::new_redo.close_files();
 	purge_sys.close();
 	trx_sys.close();
 	if (buf_dblwr) {
