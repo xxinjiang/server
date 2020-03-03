@@ -37,6 +37,7 @@ Created June 2005 by Marko Makela
 /** A BLOB field reference full of zero, for use in assertions and tests.
 Initially, BLOB field references are set to zero, in
 dtuple_convert_big_rec(). */
+alignas(UNIV_PAGE_SIZE_MIN)
 const byte field_ref_zero[UNIV_PAGE_SIZE_MAX] = { 0, };
 
 #include "mtr0log.h"
