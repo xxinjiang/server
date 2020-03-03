@@ -3007,8 +3007,8 @@ static uint make_sortkey(Sort_param *param, uchar *to)
     to+= sort_field->length;
   }
 
-  DBUG_ASSERT(static_cast<uint>(to - orig_to) == param->sort_length);
-  return param->sort_length;
+  DBUG_ASSERT(static_cast<uint>(to - orig_to) <= param->sort_length);
+  return static_cast<uint>(to - orig_to);
 }
 
 
@@ -3044,7 +3044,8 @@ static uint make_packed_sortkey(Sort_param *param, uchar *to)
     to+= length;
   }
 
-  DBUG_ASSERT(static_cast<uint>(to - orig_to) <= param->sort_length);
-  return static_cast<uint>(to - orig_to);
-;
+  length= static_cast<int>(to - orig_to);
+  DBUG_ASSERT(length <= param->sort_length);
+  Sort_keys::store_sortkey_length(orig_to, length);
+  return length;
 }
