@@ -51,6 +51,9 @@ static bool write_keys(THD *thd, Sort_param *param, SORT_INFO *fs_info,
                       uint count, IO_CACHE *buffer_file, IO_CACHE *tempfile,
                       Filesort_tracker *tracker);
 static uint make_sortkey(Sort_param *param, uchar *to, uchar *ref_pos);
+static uint make_sortkey(Sort_param *param, uchar *to);
+static uint make_packed_sortkey(Sort_param *param, uchar *to);
+
 static void register_used_fields(Sort_param *param);
 static bool save_index(THD *thd, Sort_param *param, uint count,
                        SORT_INFO *table_sort, Filesort_tracker *tracker);
@@ -1359,46 +1362,10 @@ static uint make_sortkey(Sort_param *param, uchar *to, uchar *ref_pos)
   SORT_FIELD *sort_field;
   uint length;
   uchar *orig_to= to;
-  enum sort_method_t order_by_type= param->order_by_strategy();
 
-  const bool using_packed_sortkeys= param->using_packed_sortkeys();
-  if (using_packed_sortkeys)
-    to+= Sort_keys::size_of_length_field;
-
-  for (sort_field=param->local_sortorder.begin() ;
-       sort_field != param->local_sortorder.end() ;
-       sort_field++)
-  {
-    bool maybe_null=0;
-    if ((field=sort_field->field))
-    {
-      // Field
-      length= field->make_sort_key(order_by_type, to, sort_field);
-      if ((maybe_null= field->maybe_null()))
-        to++;
-    }
-    else
-    {						// Item
-      Item *item= sort_field->item;
-      length= item->type_handler()->make_sort_key(order_by_type, to,
-                                                  sort_field->item,
-                                                  sort_field, param);
-      if ((maybe_null= sort_field->item->maybe_null))
-        to++;
-    }
-
-    if (!using_packed_sortkeys && sort_field->reverse)
-        reverse_key(to, maybe_null, sort_field);
-    to+= length;
-  }
-
-  if (using_packed_sortkeys)
-  {
-    length= static_cast<int>(to - orig_to);
-    DBUG_ASSERT(length <= param->sort_length);
-    Sort_keys::store_sortkey_length(orig_to, length);
-    to= orig_to+length;
-  }
+  to+= param->using_packed_sortkeys() ?
+       make_packed_sortkey(param, to) :
+       make_sortkey(param, to);
 
   if (param->using_addon_fields())
   {
@@ -3036,4 +3003,82 @@ SORT_FIELD_ATTR::pack_sort_string(uchar *to, const LEX_CSTRING &str,
     to+= suffix_length;
   }
   return static_cast<uint>(to - orig_to);
+}
+
+
+static uint make_sortkey(Sort_param *param, uchar *to)
+{
+  Field *field;
+  SORT_FIELD *sort_field;
+  uint length;
+  uchar *orig_to= to;
+
+  for (sort_field=param->local_sortorder.begin() ;
+       sort_field != param->local_sortorder.end() ;
+       sort_field++)
+  {
+    bool maybe_null=0;
+    if ((field=sort_field->field))
+    {
+      // Field
+      length= field->make_sort_key(to, sort_field->length);
+      if ((maybe_null= field->maybe_null()))
+        to++;
+    }
+    else
+    {           // Item
+      Item *item= sort_field->item;
+      length= item->type_handler()->make_sort_key(to, item,
+                                                  sort_field, param);
+      if ((maybe_null= sort_field->item->maybe_null))
+        to++;
+    }
+
+    if (sort_field->reverse)
+        reverse_key(to, maybe_null, sort_field);
+    to+= length;
+  }
+
+  length= static_cast<int>(to - orig_to);
+  DBUG_ASSERT(length <= param->sort_length);
+  return length;
+
+}
+
+
+static uint make_packed_sortkey(Sort_param *param, uchar *to)
+{
+  Field *field;
+  SORT_FIELD *sort_field;
+  uint length;
+  uchar *orig_to= to;
+
+  to+= Sort_keys::size_of_length_field;
+
+  for (sort_field=param->local_sortorder.begin() ;
+       sort_field != param->local_sortorder.end() ;
+       sort_field++)
+  {
+    bool maybe_null=0;
+    if ((field=sort_field->field))
+    {
+      // Field
+      length= field->make_packed_sort_key(to, sort_field);
+      if ((maybe_null= field->maybe_null()))
+        to++;
+    }
+    else
+    {           // Item
+      Item *item= sort_field->item;
+      length= item->type_handler()->make_packed_sort_key(to, item,
+                                                         sort_field, param);
+      if ((maybe_null= sort_field->item->maybe_null))
+        to++;
+    }
+    to+= length;
+  }
+
+  length= static_cast<int>(to - orig_to);
+  DBUG_ASSERT(length <= param->sort_length);
+  return length;
 }
