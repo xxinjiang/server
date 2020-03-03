@@ -2978,7 +2978,6 @@ static uint make_sortkey(Sort_param *param, uchar *to)
 {
   Field *field;
   SORT_FIELD *sort_field;
-  uint length;
   uchar *orig_to= to;
 
   for (sort_field=param->local_sortorder.begin() ;
