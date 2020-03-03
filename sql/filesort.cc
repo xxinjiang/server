@@ -1330,9 +1330,6 @@ Type_handler_real_result::make_sort_key(uchar *to, Item *item,
 static uint make_sortkey(Sort_param *param, uchar *to, uchar *ref_pos,
                          bool using_packed_sortkeys)
 {
-  Field *field;
-  SORT_FIELD *sort_field;
-  uint length;
   uchar *orig_to= to;
 
   to+= using_packed_sortkeys ?
@@ -3000,7 +2997,7 @@ static uint make_sortkey(Sort_param *param, uchar *to)
     else
     {           // Item
       sort_field->item->type_handler()->make_sort_key(to, sort_field->item,
-                                                      sort_field, sort_param);
+                                                      sort_field, param);
       if ((maybe_null= sort_field->item->maybe_null))
         to++;
     }
@@ -3047,7 +3044,7 @@ static uint make_packed_sortkey(Sort_param *param, uchar *to)
     to+= length;
   }
 
-  DBUG_ASSERT(static_cast<int>(to - orig_to) <= param->sort_length);
-  return static_cast<int>(to - orig_to);
+  DBUG_ASSERT(static_cast<uint>(to - orig_to) <= param->sort_length);
+  return static_cast<uint>(to - orig_to);
 ;
 }

@@ -473,10 +473,6 @@ public:
     *resl= using_addon_fields() ? addon_length : res_length;
   }
   void try_to_pack_sortkeys();
-  enum sort_method_t order_by_strategy()
-  {
-    return using_packed_sortkeys() ? ORDER_BY_ORIGINAL :ORDER_BY_STRXFRM;
-  }
 
   qsort2_cmp get_compare_function() const
   {
