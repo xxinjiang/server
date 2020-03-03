@@ -93,7 +93,8 @@ class SORT_INFO
 public:
   SORT_INFO()
     :addon_fields(NULL), record_pointers(0),
-     sorted_result_in_fsbuf(FALSE)
+     sorted_result_in_fsbuf(FALSE),
+     sort_keys(NULL)
   {
     buffpek.str= 0;
     my_b_clear(&io_cache);
