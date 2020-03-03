@@ -1,6 +1,6 @@
 #!/bin/bash -ue
 # Copyright (C) 2013 Percona Inc
-# Copyright (C) 2017-2019 MariaDB
+# Copyright (C) 2017-2020 MariaDB
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -988,7 +988,7 @@ then
     rm -f "${DATA}/${IST_FILE}"
 
     # May need xtrabackup_checkpoints later on
-    rm -f ${DATA}/xtrabackup_binary ${DATA}/xtrabackup_galera_info  ${DATA}/ib_logfile0
+    rm -f ${DATA}/xtrabackup_binary ${DATA}/xtrabackup_galera_info  ${DATA}/ib_logfile0 ${DATA}/ib_logdata
 
     ADDR=${WSREP_SST_OPT_ADDR}
     if [ -z "${SST_PORT}" ]

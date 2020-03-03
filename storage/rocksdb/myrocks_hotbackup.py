@@ -27,7 +27,7 @@ rocksdb_files = ['MANIFEST', 'CURRENT', 'OPTIONS']
 rocksdb_data_suffix = '.sst'
 rocksdb_wal_suffix = '.log'
 exclude_files = ['master.info', 'relay-log.info', 'worker-relay-log.info',
-                 'auto.cnf', 'gaplock.log', 'ibdata', 'ib_logfile', '.trash']
+                 'auto.cnf', 'gaplock.log', 'ibdata', 'ib_log', '.trash']
 wdt_bin = 'wdt'
 
 def is_manifest(fname):
