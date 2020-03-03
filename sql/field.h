@@ -1417,14 +1417,10 @@ public:
     return bytes;
   }
 
-
-  uint make_sort_key(enum sort_method_t order_by_type,
-                     uchar *buff, const SORT_FIELD_ATTR *sort_field);
-
   /*
     Create mem-comparable sort keys
   */
-  uint make_sort_key(uchar *buff, uint length);
+  void make_sort_key(uchar *buff, uint length);
 
   /*
     create a compact sort key which can be compared with a comparison

@@ -263,7 +263,7 @@ public:
     DBUG_ASSERT(!is_null());
   }
 
-  inline bool using_packed_sortkeys() const
+  bool using_packed_sortkeys() const
   { return m_using_packed_sortkeys; }
 
   void set_using_packed_sortkeys(bool val)
@@ -412,7 +412,7 @@ public:
     return m_using_packed_addons;
   }
 
-  inline bool using_packed_sortkeys() const
+  bool using_packed_sortkeys() const
   {
     DBUG_ASSERT(m_using_packed_sortkeys ==
                 (sort_keys != NULL && sort_keys->using_packed_sortkeys()));

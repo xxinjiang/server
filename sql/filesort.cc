@@ -804,8 +804,9 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
   MY_BITMAP *save_read_set, *save_write_set;
   Item *sort_cond;
   ha_rows num_records= 0;
-  const bool packed_addon_fields= param->using_packed_addons();
-  const bool packed_sort_keys= param->using_packed_sortkeys();
+  const bool packing_format= (param->using_packed_addons() ||
+                              param->using_packed_sortkeys());
+
   DBUG_ENTER("find_all_keys");
   DBUG_PRINT("info",("using: %s",
                      (select ? select->quick ? "ranges" : "where":
@@ -933,8 +934,7 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
         uchar *start_of_rec= fs_info->get_next_record_pointer();
 
         const uint rec_sz= make_sortkey(param, start_of_rec, ref_pos);
-        if ((packed_addon_fields || packed_sort_keys) &&
-            rec_sz != param->rec_length)
+        if (packing_format && rec_sz != param->rec_length)
           fs_info->adjust_next_record_pointer(rec_sz);
         idx++;
       }
@@ -3021,7 +3021,7 @@ static uint make_sortkey(Sort_param *param, uchar *to)
     if ((field=sort_field->field))
     {
       // Field
-      length= field->make_sort_key(to, sort_field->length);
+      field->make_sort_key(to, sort_field->length);
       if ((maybe_null= field->maybe_null()))
         to++;
     }
@@ -3036,13 +3036,11 @@ static uint make_sortkey(Sort_param *param, uchar *to)
 
     if (sort_field->reverse)
         reverse_key(to, maybe_null, sort_field);
-    to+= length;
+    to+= sort_field->length;
   }
 
-  length= static_cast<int>(to - orig_to);
-  DBUG_ASSERT(length <= param->sort_length);
-  return length;
-
+  DBUG_ASSERT(static_cast<uint>(to - orig_to) == param->sort_length);
+  return param->sort_length;
 }
 
 

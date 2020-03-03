@@ -1025,37 +1025,18 @@ CPP_UNNAMED_NS_END
     length of the bytes written, does not include the NULL bytes
 */
 
-uint
-Field::make_sort_key(enum sort_method_t order_by_type,
-                     uchar *buff, const SORT_FIELD_ATTR *sort_field)
-{
-  switch (order_by_type)
-  {
-    case ORDER_BY_STRXFRM:
-      return make_sort_key(buff, sort_field->length);
-    case ORDER_BY_ORIGINAL:
-      return make_packed_sort_key(buff, sort_field);
-    default:
-      DBUG_ASSERT(0);
-      break;
-  }
-  return 0;
-}
-
-
-uint Field::make_sort_key(uchar *buff,uint length)
+void Field::make_sort_key(uchar *buff,uint length)
 {
   if (maybe_null())
   {
     if (is_null())
     {
       bzero(buff, length + 1);
-      return length;
+      return;
     }
     *buff++= 1;
   }
   sort_string(buff, length);
-  return length;
 }
 
 
