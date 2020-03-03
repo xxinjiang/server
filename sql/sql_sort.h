@@ -469,14 +469,16 @@ public:
   {
     if (m_using_packed_addons || m_using_packed_sortkeys)
     {
+      uint sort_length= get_sort_length(record_start);
+      uint addon_length= get_addon_length(record_start + sort_length);
+      *recl= sort_length + addon_length;
+      *resl= using_addon_fields() ? addon_length : res_length;
+    }
+    else
+    {
       *recl= rec_length;
       *resl= res_length;
-      return;
     }
-    uint sort_length= get_sort_length(record_start);
-    uint addon_length= get_addon_length(record_start + sort_length);
-    *recl= sort_length + addon_length;
-    *resl= using_addon_fields() ? addon_length : res_length;
   }
 
   void try_to_pack_sortkeys();
