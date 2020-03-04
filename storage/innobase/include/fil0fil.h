@@ -1384,6 +1384,7 @@ fil_space_extend(
 @param[in]	message		message for aio handler if non-sync aio
 				used, else ignored
 @param[in]	ignore		whether to ignore out-of-bounds page_id
+@param[in]	punch_hole	Punch hole the freed page
 @return DB_SUCCESS, or DB_TABLESPACE_DELETED
 if we are trying to do i/o on a tablespace which does not exist */
 dberr_t
@@ -1396,7 +1397,8 @@ fil_io(
 	ulint			len,
 	void*			buf,
 	void*			message,
-	bool			ignore = false);
+	bool			ignore = false,
+	bool			punch_hole = false);
 
 /**********************************************************************//**
 Waits for an aio operation to complete. This function is used to write the
