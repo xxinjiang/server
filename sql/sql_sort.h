@@ -455,8 +455,13 @@ public:
 
   uint get_record_length(uchar *plen)
   {
-    uint sort_length= get_sort_length(plen);
-    return sort_length + get_addon_length(plen + sort_length);
+    if (m_packed_format)
+    {
+      uint sort_len= get_sort_length(plen);
+      return sort_len + get_addon_length(plen + sort_len);
+    }
+    else
+      return rec_length;
   }
 
   /**
@@ -467,12 +472,12 @@ public:
    */
   void get_rec_and_res_len(uchar *record_start, uint *recl, uint *resl)
   {
-    if (m_using_packed_addons || m_using_packed_sortkeys)
+    if (m_packed_format)
     {
-      uint sort_length= get_sort_length(record_start);
-      uint addon_length= get_addon_length(record_start + sort_length);
-      *recl= sort_length + addon_length;
-      *resl= using_addon_fields() ? addon_length : res_length;
+      uint sort_len= get_sort_length(record_start);
+      uint addon_len= get_addon_length(record_start + sort_len);
+      *recl= sort_len + addon_len;
+      *resl= using_addon_fields() ? addon_len : res_length;
     }
     else
     {
