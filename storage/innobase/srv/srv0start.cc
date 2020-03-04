@@ -274,6 +274,10 @@ static dberr_t create_log_file(lsn_t lsn, std::string& logfile0)
 	DBUG_EXECUTE_IF("innodb_log_abort_7", return DB_ERROR;);
 	DBUG_PRINT("ib_log", ("After innodb_log_abort_7"));
 
+	if (dberr_t err = create_data_file(srv_log_file_size)) {
+		return err;
+	}
+
 	logfile0 = get_log_file_path(LOG_FILE_NAME_PREFIX)
 			   .append(INIT_LOG_FILE0);
 
@@ -301,10 +305,6 @@ static dberr_t create_log_file(lsn_t lsn, std::string& logfile0)
 
 	DBUG_EXECUTE_IF("innodb_log_abort_8", return(DB_ERROR););
 	DBUG_PRINT("ib_log", ("After innodb_log_abort_8"));
-
-	if (dberr_t err = create_data_file(srv_log_file_size)) {
-		return err;
-	}
 
 	/* We did not create the first log file initially as LOG_FILE_NAME, so
 	that crash recovery cannot find it until it has been completed and
