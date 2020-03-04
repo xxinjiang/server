@@ -68,11 +68,11 @@ FOUND 1 /InnoDB: Cannot create log file in read-only mode/ in mysqld.1.err
 # restart: --debug=d,innodb_log_abort_8
 SELECT * FROM t1;
 ERROR 42000: Unknown storage engine 'InnoDB'
-FOUND 1 /InnoDB: Setting log file .*ib_logfile[0-9]+ size to/ in mysqld.1.err
+FOUND 1 /InnoDB: Setting log file .*ib_logdata size to/ in mysqld.1.err
 # restart: --debug=d,innodb_log_abort_9
 SELECT * FROM t1;
 ERROR 42000: Unknown storage engine 'InnoDB'
-FOUND 1 /InnoDB: Setting log file .*ib_logfile[0-9]+ size to/ in mysqld.1.err
+FOUND 1 /InnoDB: Setting log file .*ib_logdata size to/ in mysqld.1.err
 # restart: --debug=d,innodb_log_abort_9
 SELECT * FROM t1;
 ERROR 42000: Unknown storage engine 'InnoDB'
@@ -85,7 +85,7 @@ a
 # restart: --debug=d,innodb_log_abort_10
 SELECT * FROM t1;
 ERROR 42000: Unknown storage engine 'InnoDB'
-FOUND 1 /InnoDB: Setting log file .*ib_logfile[0-9]+ size to/ in mysqld.1.err
+FOUND 1 /InnoDB: Setting log file .*ib_logdata size to/ in mysqld.1.err
 FOUND 1 /InnoDB: Renaming log file .*ib_logfile101 to .*ib_logfile0/ in mysqld.1.err
 # restart
 SELECT * FROM t1;
