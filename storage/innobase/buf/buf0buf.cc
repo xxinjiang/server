@@ -4930,8 +4930,6 @@ buf_page_create(
 	if (block
 	    && buf_page_in_file(&block->page)
 	    && !buf_pool_watch_is_sentinel(&block->page)) {
-		block->page.status = NORMAL;
-
 		/* Page can be found in buf_pool */
 		mutex_exit(&buf_pool->mutex);
 		rw_lock_x_unlock(hash_lock);
