@@ -132,6 +132,7 @@ void Sort_param::try_to_pack_addons(ulong max_length_for_sort_data)
 
   addon_fields->set_using_packed_addons(true);
   m_using_packed_addons= true;
+  m_packed_format= true;
 
   addon_length+= sz;
   res_length+= sz;
@@ -805,8 +806,7 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
   MY_BITMAP *save_read_set, *save_write_set;
   Item *sort_cond;
   ha_rows num_records= 0;
-  const bool packed_format= (param->using_packed_addons() ||
-                             param->using_packed_sortkeys());
+  const bool packed_format= param->is_packed_format();
   const bool using_packed_sortkeys= param->using_packed_sortkeys();
 
   DBUG_ENTER("find_all_keys");
@@ -1447,6 +1447,7 @@ static bool save_index(THD *thd, Sort_param *param, uint count,
     DBUG_RETURN(0);
   }
 
+  bool using_packed_sortkeys= param->using_packed_sortkeys();
   res_length= param->res_length;
   offset= param->rec_length-res_length;
   if (!(to= table_sort->record_pointers= 
@@ -1457,7 +1458,7 @@ static bool save_index(THD *thd, Sort_param *param, uint count,
   {
     uchar *record= table_sort->get_sorted_record(ix);
 
-    length= param->using_packed_sortkeys() ?
+    length= using_packed_sortkeys ?
             Sort_keys::read_sortkey_length(record) : offset;
 
     memcpy(to, record + length, res_length);
@@ -1829,8 +1830,7 @@ bool merge_buffers(Sort_param *param, IO_CACHE *from_file,
 
   const bool using_packed_sortkeys= param->using_packed_sortkeys();
   bool offset_for_packing= (flag == 1 && using_packed_sortkeys);
-  const bool packed_format= (param->using_packed_addons() ||
-                             param->using_packed_sortkeys());
+  const bool packed_format= param->is_packed_format();
 
   maxcount= (ulong) (param->max_keys_per_buffer/((uint) (Tb-Fb) +1));
   to_start_filepos= my_b_tell(to_file);
@@ -1846,8 +1846,8 @@ bool merge_buffers(Sort_param *param, IO_CACHE *from_file,
   }
   else
   {
-      cmp= param->get_compare_function();
-      first_cmp_arg= param->get_compare_argument(&sort_length);
+    cmp= param->get_compare_function();
+    first_cmp_arg= param->get_compare_argument(&sort_length);
   }
   if (unlikely(init_queue(&queue, (uint) (Tb-Fb)+1,
                          offsetof(Merge_chunk,m_current_key), 0,
@@ -2521,8 +2521,8 @@ void Sort_param::try_to_pack_sortkeys()
   if (sort_len < 20 + sz + size_of_packable_fields)
     return;
 
-
   sort_keys->set_using_packed_sortkeys(true);
+  m_packed_format= true;
   m_using_packed_sortkeys= true;
   sort_length= sort_len + sz + size_of_packable_fields +
                (using_addon_fields() ?  0 : res_length);

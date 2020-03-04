@@ -496,11 +496,17 @@ public:
            (void*) sort_len;
   }
 
+  bool is_packed_format() const
+  {
+    return m_packed_format;
+  }
+
 private:
   uint m_packable_length;
   bool m_using_packed_addons; ///< caches the value of using_packed_addons()
   /* caches the value of using_packed_sortkeys() */
   bool m_using_packed_sortkeys;
+  bool m_packed_format;
 };
 
 typedef Bounds_checked_array<uchar> Sort_buffer;
