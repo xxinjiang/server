@@ -1046,9 +1046,9 @@ write_keys(THD *thd, Sort_param *param,  SORT_INFO *fs_info, uint count,
   for (uint ix= 0; ix < count; ++ix)
   {
     uchar *record= fs_info->get_sorted_record(ix);
-    rec_length= param->get_record_length(record);
 
-    if (my_b_write(tempfile, record, rec_length))
+
+    if (my_b_write(tempfile, record, param->get_record_length(record)))
       DBUG_RETURN(1);                           /* purecov: inspected */
   }
 
