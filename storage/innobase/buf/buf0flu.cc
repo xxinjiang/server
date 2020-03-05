@@ -1022,6 +1022,17 @@ not_compressed:
   return d;
 }
 
+/** Punch hole the file for particular page in page compressed tablespace
+@param[in]	bpage	buffer control block */
+static void buf_flush_do_punch_hole(buf_page_t* bpage)
+{
+	ulint	type = IORequest::WRITE;
+	IORequest request(type, bpage);
+	fil_io(request, true, bpage->id, bpage->zip_size(), 0,
+	       bpage->physical_size(), NULL, bpage,
+		false, /* Punch hole */true);
+}
+
 /********************************************************************//**
 Does an asynchronous write of a buffer page. NOTE: when the
 doublewrite buffer is used, we must call
@@ -1029,16 +1040,20 @@ buf_dblwr_flush_buffered_writes after we have posted a batch of
 writes!
 @param[in]	bpage		buffer block to write
 @param[in]	flush_type	type of flush
-@param[in]	sync		true if sync IO request
-@param[in]	space		page of the tablespace to be flushed */
+@param[in]	sync		true if sync IO request */
 static
 void
 buf_flush_write_block_low(
 	buf_page_t*	bpage,
 	buf_flush_t	flush_type,
-	bool		sync,
-	fil_space_t*	space)
+	bool		sync)
 {
+	fil_space_t* space = fil_space_acquire_for_io(bpage->id.space());
+
+	if (!space) {
+		return;
+	}
+
 	ut_ad(space->purpose == FIL_TYPE_TEMPORARY
 	      || space->purpose == FIL_TYPE_IMPORT
 	      || space->purpose == FIL_TYPE_TABLESPACE);
@@ -1064,7 +1079,24 @@ buf_flush_write_block_low(
 	ut_ad(!buf_page_get_mutex(bpage)->is_owned());
 	ut_ad(buf_page_get_io_fix(bpage) == BUF_IO_WRITE);
 	ut_ad(bpage->oldest_modification != 0);
+	
+	const bool use_doublewrite = (bpage->status == NORMAL)
+		&& space->use_doublewrite();
+	bool punch_hole = false;
 
+	/* Ignore the flushing of freed page */
+	if (bpage->status == FREED) {
+#if defined(HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE) || defined(_WIN32)
+		punch_hole = (space != fil_system.temp_space
+			      && space->is_compressed());
+		if (punch_hole) {
+			goto complete_io;
+		}
+#endif
+		if (!srv_immediate_scrub_data_uncompressed) {
+			goto complete_io;	
+		}
+	}
 	switch (buf_page_get_state(bpage)) {
 	case BUF_BLOCK_POOL_WATCH:
 	case BUF_BLOCK_ZIP_PAGE: /* The page should be dirty. */
@@ -1120,9 +1152,6 @@ buf_flush_write_block_low(
 		frame = const_cast<byte*>(field_ref_zero);
 	}
 
-	const bool use_doublewrite = (bpage->status == NORMAL)
-		&& space->use_doublewrite();
-
 	if (!use_doublewrite) {
 		ulint	type = IORequest::WRITE;
 		IORequest request(type, bpage);
@@ -1152,6 +1181,7 @@ buf_flush_write_block_low(
 			fil_flush(space);
 		}
 
+complete_io:
 		/* The tablespace could already have been dropped,
 		because fil_io(request, sync) would already have
 		decremented the node->n_pending. However,
@@ -1161,34 +1191,24 @@ buf_flush_write_block_low(
 #ifdef UNIV_DEBUG
 		dberr_t err =
 #endif
+		
 		/* true means we want to evict this page from the
 		LRU list as well. */
-		buf_page_io_complete(bpage, use_doublewrite, true);
+		buf_page_io_complete(bpage, use_doublewrite,
+				     (bpage->status != FREED) ? true: false);
 
 		ut_ad(err == DB_SUCCESS);
+
+		if (punch_hole) {
+			buf_flush_do_punch_hole(bpage);
+		}
+		
 	}
 
+	space->release_for_io();
 	/* Increment the counter of I/O operations used
 	for selecting LRU policy. */
 	buf_LRU_stat_inc_io();
-}
-
-/** Punch hole the file for particular page in page compressed tablespace
-@param[in]	bpage	buffer control block */
-static void buf_flush_do_punch_hole(buf_page_t* bpage)
-{
-	/* Release all the mutex before punch hole the file */
-	buf_flush_remove(bpage);
-
-	BPageMutex* block_mutex = buf_page_get_mutex(bpage);
-	mutex_exit(block_mutex);
-	mutex_exit(&buf_pool->mutex);
-
-	ulint	type = IORequest::WRITE;
-	IORequest request(type, bpage);
-	fil_io(request, true, bpage->id, bpage->zip_size(), 0,
-	       bpage->physical_size(), NULL, bpage,
-		false, /* Punch hole */true);
 }
 
 /** Write a flushable page asynchronously from the buffer pool to a file.
@@ -1214,37 +1234,13 @@ bool buf_flush_page(buf_page_t* bpage, buf_flush_t flush_type, bool sync)
 	ut_ad(mutex_own(block_mutex));
 
 	ut_ad(buf_flush_ready_for_flush(bpage, flush_type));
-	fil_space_t* space = fil_space_acquire_for_io(bpage->id.space());
 
 	/* Ignore the flushing of temporary tablespace pages while
 	shutting down */
 	if (!srv_undo_sources
 	    && fsp_is_system_temporary(bpage->id.space())) {
-remove_flush:
-		if (space) {
-			space->release_for_io();
-		}
-
 		buf_flush_remove(bpage);
 		return false;
-	}
-
-	if (!space) {
-		goto remove_flush;
-	}
-
-	/* Ignore the flushing of freed page */
-	if (bpage->status == FREED) {
-#if defined(HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE) || defined(_WIN32)
-		if (space != fil_system.temp_space && space->is_compressed()) {
-			buf_flush_do_punch_hole(bpage);
-			space->release_for_io();
-			return true;
-		}
-#endif
-		if (!srv_immediate_scrub_data_uncompressed) {
-			goto remove_flush;
-		}
 	}
 
 	const bool is_uncompressed = (buf_page_get_state(bpage)
@@ -1265,13 +1261,11 @@ remove_flush:
 		/* For table residing in temporary tablespace sync is done
 		using IO_FIX and so before scheduling for flush ensure that
 		page is not fixed. */
-		space->release_for_io();
 		return false;
 	} else {
 		rw_lock = &reinterpret_cast<buf_block_t*>(bpage)->lock;
 		if (flush_type != BUF_FLUSH_LIST
 		    && !rw_lock_sx_lock_nowait(rw_lock, BUF_IO_WRITE)) {
-			space->release_for_io();
 			return false;
 		}
 	}
@@ -1314,8 +1308,7 @@ remove_flush:
 	oldest_modification != 0.  Thus, it cannot be relocated in the
 	buffer pool or removed from flush_list or LRU_list. */
 
-	buf_flush_write_block_low(bpage, flush_type, sync, space);
-	space->release_for_io();
+	buf_flush_write_block_low(bpage, flush_type, sync);
 	return true;
 }
 
