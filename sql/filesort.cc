@@ -1020,7 +1020,6 @@ write_keys(THD *thd, Sort_param *param,  SORT_INFO *fs_info, uint count,
            IO_CACHE *buffpek_pointers, IO_CACHE *tempfile,
            Filesort_tracker *tracker)
 {
-  size_t rec_length;
   Merge_chunk buffpek;
   DBUG_ENTER("write_keys");
 
