@@ -1236,7 +1236,7 @@ remove_flush:
 	/* Ignore the flushing of freed page */
 	if (bpage->status == FREED) {
 #if defined(HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE) || defined(_WIN32)
-		if (space->is_compressed()) {
+		if (space != fil_system.temp_space && space->is_compressed()) {
 			buf_flush_do_punch_hole(bpage);
 			space->release_for_io();
 			return true;
