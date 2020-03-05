@@ -1023,8 +1023,6 @@ write_keys(THD *thd, Sort_param *param,  SORT_INFO *fs_info, uint count,
   Merge_chunk buffpek;
   DBUG_ENTER("write_keys");
 
-  rec_length= param->rec_length;
-
   tracker->sort_time_tracker.start_tracking(thd);
   fs_info->sort_buffer(param, count);
   tracker->sort_time_tracker.stop_tracking(thd);
