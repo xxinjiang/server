@@ -112,15 +112,12 @@ struct Worker_thread_context
   In out setup, server becomes idle when async socket io is made.
 */
 
-extern void net_before_header_psi(struct st_net *net, void *user_data, size_t);
-
-static void dummy_before_header(struct st_net *, void *, size_t)
-{
-}
+void dummy() {}
 
 static void re_init_net_server_extension(THD *thd)
 {
-  thd->m_net_server_extension.m_before_header = dummy_before_header;
+  thd->m_net_server_extension.m_before_header = (before_header_callback_fn)dummy;
+  thd->m_net_server_extension.m_after_header = (after_header_callback_fn)dummy;
 }
 
 #else
@@ -133,9 +130,6 @@ static void re_init_net_server_extension(THD *thd)
 static inline void set_thd_idle(THD *thd)
 {
   thd->net.reading_or_writing= 1;
-#ifdef HAVE_PSI_INTERFACE
-  net_before_header_psi(&thd->net, thd, 0);
-#endif
 }
 
 /*
@@ -151,7 +145,7 @@ static void thread_attach(THD* thd)
   pthread_setspecific(THR_KEY_mysys,thd->mysys_var);
   thd->thread_stack=(char*)&thd;
   thd->store_globals();
-  PSI_CALL_set_thread(thd->event_scheduler.m_psi);
+  PSI_CALL_set_thread(thd->get_psi());
   mysql_socket_set_thread_owner(thd->net.vio->mysql_socket);
 }
 
@@ -235,32 +229,19 @@ static THD* threadpool_add_connection(CONNECT *connect, void *scheduler_data)
   pthread_setspecific(THR_KEY_mysys, 0);
   my_thread_init();
   st_my_thread_var* mysys_var= (st_my_thread_var *)pthread_getspecific(THR_KEY_mysys);
+  PSI_CALL_set_thread(PSI_CALL_new_thread(key_thread_one_connection, connect, 0));
   if (!mysys_var ||!(thd= connect->create_thd(NULL)))
   {
     /* Out of memory? */
     connect->close_and_delete();
     if (mysys_var)
-    {
-#ifdef HAVE_PSI_INTERFACE
-      /*
-       current PSI is still from worker thread.
-       Set to 0, to avoid premature cleanup by my_thread_end
-      */
-      if (PSI_server) PSI_server->set_thread(0);
-#endif
       my_thread_end();
-    }
     return NULL;
   }
   delete connect;
   server_threads.insert(thd);
   thd->set_mysys_var(mysys_var);
   thd->event_scheduler.data= scheduler_data;
-
-  /* Create new PSI thread for use with the THD. */
-  thd->event_scheduler.m_psi=
-    PSI_CALL_new_thread(key_thread_one_connection, thd, thd->thread_id);
-
 
   /* Login. */
   thread_attach(thd);
@@ -301,6 +282,7 @@ static void threadpool_remove_connection(THD *thd)
   end_connection(thd);
   close_connection(thd, 0);
   unlink_thd(thd);
+  PSI_CALL_delete_current_thread(); // before THD is destroyed
   delete thd;
 
   /*
