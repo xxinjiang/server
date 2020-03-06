@@ -20,12 +20,13 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <cstddef>
 #include <iterator>
+#include <type_traits>
 
 namespace st_ {
 
 template <class ElementType> class span {
 public:
-	typedef ElementType element_type;
+	using element_type = typename std::remove_cv<ElementType>::type;
 	typedef ElementType value_type;
 	typedef size_t index_type;
 	typedef ptrdiff_t difference_type;

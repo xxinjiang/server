@@ -1012,7 +1012,7 @@ func_exit:
   buf[0]= FILE_CHECKPOINT | (8 + 6);
   mach_write_to_8(&buf[1], flush_lsn);
   mach_write_to_4(&buf[1 + 8 + 6], ut_crc32(buf, 1 + 8 + 6));
-  log_sys.append_to_main_log({buf, sizeof buf});
+  log_sys.append_to_main_log(buf);
 
   log_mutex_enter();
 
