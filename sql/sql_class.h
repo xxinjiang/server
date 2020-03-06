@@ -6284,8 +6284,23 @@ struct SORT_FIELD_ATTR
 
   /* Max. length of the original value, in bytes */
   uint original_length;
+  /*
+    FALSE : for packable datatypes like CHAR, VARCHAR and BLOBS
+    TRUE  : otherwise
+  */
+  bool fixed_type;
+  /*
+    TRUE  : if the item or field is NULLABLE
+    FALSE : otherwise
+  */
+  bool maybe_null;
+  CHARSET_INFO *cs; 
   uint pack_sort_string(uchar *to, const LEX_CSTRING &str,
                         CHARSET_INFO *cs) const;
+  int compare_packed_fixed_size_vals(uchar *a, size_t *a_len,
+                                     uchar *b, size_t *b_len);
+  int compare_packed_varstrings(uchar *a, size_t *a_len,
+                                uchar *b, size_t *b_len);
 };
 
 

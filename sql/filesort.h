@@ -225,14 +225,6 @@ bool filesort_use_addons(TABLE *table, uint sortlength,
 
 void change_double_for_sort(double nr,uchar *to);
 void store_length(uchar *to, uint length, uint pack_length);
-int compare_packed_fixed_size_vals(uchar *a, size_t *a_len,
-                                   uchar *b, size_t *b_len,
-                                   const SORT_FIELD_ATTR *sort_field,
-                                   bool maybe_null);
-int compare_packed_varstrings(CHARSET_INFO *cs, uchar *a, size_t *a_len,
-                              uchar *b, size_t *b_len,
-                              const SORT_FIELD_ATTR *sort_field,
-                              bool maybe_null);
 void
 reverse_key(uchar *to, bool maybe_null,  const SORT_FIELD_ATTR *sort_field);
 bool check_if_packing_possible(THD *thd, CHARSET_INFO *cs,

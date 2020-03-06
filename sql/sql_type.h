@@ -3773,9 +3773,6 @@ public:
                           const Type_std_attributes *item,
                           SORT_FIELD_ATTR *attr) const= 0;
   virtual bool is_packable() const { return false; }
-  virtual int compare_packed_sort_keys(uchar *a, size_t *a_len,
-                                       uchar *b, size_t *b_len,
-                                       const SORT_FIELD *sortorder) const;
 
   /*
     create a compact sort key which can be compared with a comparison
@@ -5089,9 +5086,6 @@ public:
   void sort_length(THD *thd,
                    const Type_std_attributes *item,
                    SORT_FIELD_ATTR *attr) const override;
-  int compare_packed_sort_keys(uchar *a, size_t *a_len,
-                               uchar *b, size_t *b_len,
-                               const SORT_FIELD *sortorder) const override;
   bool is_packable()const override { return true; }
   bool union_element_finalize(const Item * item) const override;
   uint calc_key_length(const Column_definition &def) const override;

@@ -1084,30 +1084,6 @@ Field_longstr::pack_sort_string(uchar *to, const SORT_FIELD_ATTR *sort_field)
 }
 
 
-/*
-  The default implementation assumes values are fixed-size and compared with
-  memcmp.
-*/
-
-int
-Field::compare_packed_sort_keys(uchar *a, size_t *a_len,
-                                uchar *b, size_t *b_len,
-                                const SORT_FIELD *sortorder)const
-{
-  return compare_packed_fixed_size_vals(a, a_len, b, b_len, sortorder,
-                                        sortorder->field->maybe_null());
-}
-
-
-int
-Field_longstr::compare_packed_sort_keys(uchar *a, size_t *a_len,
-                                        uchar *b, size_t *b_len,
-                                        const SORT_FIELD *sortorder) const
-{
-  return compare_packed_varstrings(charset(), a, a_len, b, b_len, sortorder,
-                                   sortorder->field->maybe_null());
-}
-
 /**
   @brief
   Determine the relative position of the field value in a numeric interval

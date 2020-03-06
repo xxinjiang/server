@@ -2212,13 +2212,15 @@ sortlength(THD *thd, Sort_keys *sort_keys, bool *multi_byte_charset,
       sortorder->length= sortorder->field->sort_length();
       sortorder->suffix_length= sortorder->field->sort_suffix_length();
       sortorder->original_length= sortorder->length;
+      sortorder->fixed_type= !field->is_packable();
+      sortorder->cs= cs;
 
       if (use_strnxfrm((cs=sortorder->field->sort_charset())))
       {
         *multi_byte_charset= true;
         sortorder->length= (uint) cs->strnxfrmlen(sortorder->length);
       }
-      if (field->is_packable() && allow_packing_for_keys)
+      if (!sortorder->fixed_type && allow_packing_for_keys)
       {
         allow_packing_for_keys= check_if_packing_possible(thd, cs, sortorder);
         sortorder->length_bytes=
@@ -2226,7 +2228,7 @@ sortlength(THD *thd, Sort_keys *sort_keys, bool *multi_byte_charset,
                                             thd->variables.max_sort_length));
       }
 
-      if (sortorder->field->maybe_null())
+      if ((sortorder->maybe_null= sortorder->field->maybe_null()))
         nullable_cols++;				// Place for NULL marker
     }
     else
@@ -2234,12 +2236,13 @@ sortlength(THD *thd, Sort_keys *sort_keys, bool *multi_byte_charset,
       CHARSET_INFO *cs;
       sortorder->item->type_handler()->sort_length(thd, sortorder->item,
                                                    sortorder);
+      sortorder->fixed_type= !sortorder->item->type_handler()->is_packable();
       if (use_strnxfrm((cs=sortorder->item->collation.collation)))
       {
         *multi_byte_charset= true;
       }
-      if (sortorder->item->type_handler()->is_packable() &&
-          allow_packing_for_keys)
+      sortorder->cs= cs;
+      if (!sortorder->fixed_type && allow_packing_for_keys)
       {
         allow_packing_for_keys= check_if_packing_possible(thd, cs, sortorder);
         sortorder->length_bytes=
@@ -2247,7 +2250,7 @@ sortlength(THD *thd, Sort_keys *sort_keys, bool *multi_byte_charset,
                                             thd->variables.max_sort_length));
       }
 
-      if (sortorder->item->maybe_null)
+      if ((sortorder->maybe_null= sortorder->item->maybe_null))
         nullable_cols++;				// Place for NULL marker
     }
     set_if_smaller(sortorder->length, thd->variables.max_sort_length);
@@ -2529,6 +2532,7 @@ void Sort_param::try_to_pack_sortkeys()
   rec_length= sort_length + addon_length;
 }
 
+
 uint
 Type_handler_string_result::make_packed_sort_key(uchar *to, Item *item,
                                             const SORT_FIELD_ATTR *sort_field,
@@ -2689,31 +2693,6 @@ Type_handler_timestamp_common::make_packed_sort_key(uchar *to, Item *item,
 }
 
 
-int
-Type_handler_string_result::compare_packed_sort_keys(uchar *a, size_t *a_len,
-                                             uchar *b, size_t *b_len,
-                                             const SORT_FIELD *sortorder)const
-{
-  return compare_packed_varstrings(sortorder->item->collation.collation,
-                                   a, a_len, b, b_len, sortorder,
-                                   sortorder->item->maybe_null);
-}
-
-
-/*
-  The default implementation assumes values are fixed-size and compared with
-  memcmp.
-*/
-int
-Type_handler::compare_packed_sort_keys(uchar *a, size_t *a_len,
-                                  uchar *b, size_t *b_len,
-                                  const SORT_FIELD *sortorder)const
-{
-  return compare_packed_fixed_size_vals(a, a_len, b, b_len, sortorder,
-                                        sortorder->item->maybe_null);
-}
-
-
 /*
   @brief
     Reverse the key for DESC clause
@@ -2785,10 +2764,8 @@ qsort2_cmp get_packed_keys_compare_ptr()
   suffix_bytes are used only for binary columns.
 */
 
-int compare_packed_varstrings(CHARSET_INFO *cs, uchar *a, size_t *a_len,
-                              uchar *b, size_t *b_len,
-                              const SORT_FIELD_ATTR *sort_field,
-                              bool maybe_null)
+int SORT_FIELD_ATTR::compare_packed_varstrings(uchar *a, size_t *a_len,
+                                               uchar *b, size_t *b_len)
 {
   int retval;
   size_t a_length, b_length;
@@ -2815,24 +2792,24 @@ int compare_packed_varstrings(CHARSET_INFO *cs, uchar *a, size_t *a_len,
   else
     *a_len= *b_len= 0;
 
-  a_length= read_lowendian(a, sort_field->length_bytes);
-  b_length= read_lowendian(b, sort_field->length_bytes);
+  a_length= read_lowendian(a, length_bytes);
+  b_length= read_lowendian(b, length_bytes);
 
-  *a_len+= sort_field->length_bytes + a_length;
-  *b_len+= sort_field->length_bytes + b_length;
+  *a_len+= length_bytes + a_length;
+  *b_len+= length_bytes + b_length;
 
-  retval= cs->strnncollsp(a + sort_field->length_bytes,
-                          a_length - sort_field->suffix_length,
-                          b + sort_field->length_bytes,
-                          b_length - sort_field->suffix_length);
+  retval= cs->strnncollsp(a + length_bytes,
+                          a_length - suffix_length,
+                          b + length_bytes,
+                          b_length - suffix_length);
 
-  if (!retval && sort_field->suffix_length)
+  if (!retval && suffix_length)
   {
     DBUG_ASSERT(cs == &my_charset_bin);
     // comparing the length stored in suffix bytes for binary strings
-    a= a + sort_field->length_bytes + a_length - sort_field->suffix_length;
-    b= b + sort_field->length_bytes + b_length - sort_field->suffix_length;
-    retval= memcmp(a, b, sort_field->suffix_length);
+    a= a + length_bytes + a_length - suffix_length;
+    b= b + length_bytes + b_length - suffix_length;
+    retval= memcmp(a, b, suffix_length);
   }
 
   return retval;
@@ -2846,10 +2823,8 @@ int compare_packed_varstrings(CHARSET_INFO *cs, uchar *a, size_t *a_len,
   This is used for ordering fixed-size columns when the sorting procedure used
   packed-value format.
 */
-int compare_packed_fixed_size_vals(uchar *a, size_t *a_len,
-                                   uchar *b, size_t *b_len,
-                                   const SORT_FIELD_ATTR *sort_field,
-                                   bool maybe_null)
+int SORT_FIELD_ATTR::compare_packed_fixed_size_vals(uchar *a, size_t *a_len,
+                                                    uchar *b, size_t *b_len)
 {
   if (maybe_null)
   {
@@ -2873,9 +2848,9 @@ int compare_packed_fixed_size_vals(uchar *a, size_t *a_len,
   else
     *a_len= *b_len= 0;
 
-  *a_len+= sort_field->length;
-  *b_len+= sort_field->length;
-  return memcmp(a,b, sort_field->length);
+  *a_len+= length;
+  *b_len+= length;
+  return memcmp(a,b, length);
 }
 
 
@@ -2895,7 +2870,7 @@ int compare_packed_fixed_size_vals(uchar *a, size_t *a_len,
 */
 
 int compare_packed_sort_keys(void *sort_param,
-                        unsigned char **a_ptr, unsigned char **b_ptr)
+                             unsigned char **a_ptr, unsigned char **b_ptr)
 {
   int retval= 0;
   size_t a_len, b_len;
@@ -2909,19 +2884,9 @@ int compare_packed_sort_keys(void *sort_param,
   for (SORT_FIELD *sort_field= sort_keys->begin();
        sort_field != sort_keys->end(); sort_field++)
   {
-    if (sort_field->field)
-    {
-      retval= sort_field->field->compare_packed_sort_keys(a, &a_len,
-                                                          b, &b_len,
-                                                          sort_field);
-    }
-    else
-    {
-      Item *item= sort_field->item;
-      retval= item->type_handler()->compare_packed_sort_keys(a, &a_len,
-                                                             b, &b_len,
-                                                             sort_field);
-    }
+    retval= sort_field->fixed_type ?
+            sort_field->compare_packed_fixed_size_vals(a, &a_len, b, &b_len):
+            sort_field->compare_packed_varstrings(a, &a_len, b, &b_len);
 
     if (retval)
       return sort_field->reverse ? -retval : retval;
@@ -2941,6 +2906,9 @@ int compare_packed_sort_keys(void *sort_param,
 }
 
 
+/*
+  TODO varun: add comments here
+*/
 uint
 SORT_FIELD_ATTR::pack_sort_string(uchar *to, const LEX_CSTRING &str,
                                   CHARSET_INFO *cs) const
@@ -2971,6 +2939,9 @@ SORT_FIELD_ATTR::pack_sort_string(uchar *to, const LEX_CSTRING &str,
 }
 
 
+/*
+  TODO varun: add comments here
+*/
 static uint make_sortkey(Sort_param *param, uchar *to)
 {
   Field *field;
@@ -3007,6 +2978,9 @@ static uint make_sortkey(Sort_param *param, uchar *to)
 }
 
 
+/*
+  TODO varun: add comments here
+*/
 static uint make_packed_sortkey(Sort_param *param, uchar *to)
 {
   Field *field;

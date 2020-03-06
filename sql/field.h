@@ -1428,16 +1428,6 @@ public:
   */
   virtual uint make_packed_sort_key(uchar *buff,
                                     const SORT_FIELD_ATTR *sort_field);
-  /*
-    Compare two packed sort keys
-      @param a      Pointer to key
-      @param a_len  OUT The length of the value stored. This is only
-                        reliable when a compares as equal to b.
-    The same for b.
-  */
-  virtual int compare_packed_sort_keys(uchar *a, size_t *a_len,
-                                       uchar *b, size_t *b_len,
-                                       const SORT_FIELD *sortorder) const;
   virtual void make_send_field(Send_field *);
   virtual void sort_string(uchar *buff,uint length)=0;
   virtual bool optimize_range(uint idx, uint part) const;
@@ -2168,9 +2158,6 @@ public:
                           const Item *item,
                           bool is_eq_func) const;
   bool is_packable() override { return true; }
-  int compare_packed_sort_keys(uchar *a, size_t *a_len,
-                               uchar *b, size_t *b_len,
-                               const SORT_FIELD *sortorder)const override;
   uint make_packed_sort_key(uchar *buff,
                             const SORT_FIELD_ATTR *sort_field)override;
   uchar* pack_sort_string(uchar *to, const SORT_FIELD_ATTR *sort_field);
