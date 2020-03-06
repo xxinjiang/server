@@ -316,10 +316,7 @@ ELSE()
         MESSAGE(FATAL_ERROR "Can not find ${binname}.sh or ${binname} in "
           "${CMAKE_CURRENT_SOURCE_DIR}" )
       ENDIF()
-      # TODO: The following EXECUTE could be redundant as INSTALL_SCRIPT
-      # macro does an INSTALL(PROGRAMS ..) that automatically sets +x on
-      # the executable.
-      EXECUTE_PROCESS(COMMAND chmod +x ${CMAKE_CURRENT_BINARY_DIR}/${file})
+
       IF(NOT ${file}_COMPONENT)
         SET(${file}_COMPONENT Server)
       ENDIF()
@@ -328,10 +325,19 @@ ELSE()
         DESTINATION ${INSTALL_BINDIR}
         COMPONENT ${${file}_COMPONENT}
       )
+
       # Create symlink
-      ADD_CUSTOM_COMMAND(OUTPUT ${binname} COMMAND ${CMAKE_COMMAND} ARGS -E create_symlink ${file} ${binname})
-      ADD_CUSTOM_TARGET(symscript_${binname} ALL DEPENDS ${binname})
-      INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/${binname} DESTINATION ${INSTALL_BINDIR} COMPONENT Server)
+      if (NOT ${binname} STREQUAL ${file})
+        ADD_CUSTOM_COMMAND(OUTPUT ${binname} COMMAND ${CMAKE_COMMAND} ARGS -E create_symlink ${file} ${binname})
+        ADD_CUSTOM_TARGET(symscript_${binname} ALL DEPENDS ${binname})
+        INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/${binname} DESTINATION ${INSTALL_BINDIR} COMPONENT Server)
+
+        # Place mysql_install_db symlink also in scripts
+        if (${binname} STREQUAL "mysql_install_db")
+          INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/${file} DESTINATION ${INSTALL_SCRIPTDIR} COMPONENT Server)
+          INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/${binname} DESTINATION ${INSTALL_SCRIPTDIR} COMPONENT Server)
+        endif()
+      endif()
     endif()
   ENDFOREACH()
 

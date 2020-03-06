@@ -14,6 +14,7 @@ usr/bin/aria_pack
 usr/bin/aria_read_log
 usr/bin/galera_new_cluster
 usr/bin/galera_recovery
+usr/bin/mariadbd-safe
 usr/bin/mariadb-service-convert
 usr/bin/msql2mysql
 usr/bin/my_print_defaults
@@ -21,6 +22,7 @@ usr/bin/myisam_ftdump
 usr/bin/myisamchk
 usr/bin/myisamlog
 usr/bin/myisampack
+usr/bin/mysqld_safe
 usr/bin/perror
 usr/bin/replace
 usr/bin/resolve_stack_dump
